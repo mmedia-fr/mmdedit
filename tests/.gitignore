@@ -1,0 +1,5 @@
+# Les suites écrivent leurs fichiers d'essai (.md, .xml, .csv, .pdf, .txt)
+# dans ce dossier. Seul le code des tests est versionné.
+*
+!*.py
+!.gitignore

@@ -1,0 +1,81 @@
+MMdedit 0.2.2 — installation sur Linux et macOS
+================================================
+
+Lecteur / editeur Markdown simple, pour Windows, Linux et macOS.
+Logiciel libre sous licence GNU GPL v3 (voir le fichier LICENSE).
+
+
+CE QUE CONTIENT CETTE ARCHIVE
+-----------------------------
+
+  install-linux.sh    script d'installation pour Linux
+  install-macos.sh    script d'installation pour macOS
+  src/                le programme (Python)
+  run_mmdedit.py      point d'entree
+  LICENSE             texte de la licence
+  README.md           documentation complete
+
+Il n'y a pas de binaire pour Linux ni pour macOS : contrairement a Windows,
+l'installation se fait a partir des sources. Le script s'en charge
+entierement, il n'y a rien a compiler a la main.
+
+
+INSTALLATION SOUS LINUX
+-----------------------
+
+  tar xzf MMdedit-0.2.2-sources.tar.gz
+  cd mmdedit
+  ./packaging/install-linux.sh
+
+Le script verifie python3, cree un environnement virtuel dedie, y installe
+PySide6 (telechargement d'environ 150 Mo), copie le programme et ajoute
+l'entree de menu et les icones.
+
+  Emplacement    ~/.local/share/mmdedit
+  Commande       mmdedit [fichier]
+  Menu           chercher « MMdedit » dans les applications
+  Desinstaller   ./packaging/install-linux.sh --desinstaller
+
+Aucun privilege root n'est demande. Rien n'est installe hors du profil de
+l'utilisateur, ni dans le Python du systeme.
+
+Prerequis eventuels selon la distribution :
+  Debian / Ubuntu   sudo apt install python3 python3-venv
+  Fedora            sudo dnf install python3
+Si la fenetre refuse de s'ouvrir, il manque en general les bibliotheques Qt
+du systeme : libgl1, libxkbcommon-x11-0, libegl1 (et libxcb-cursor0 sur les
+distributions recentes).
+
+
+INSTALLATION SOUS macOS
+-----------------------
+
+  tar xzf MMdedit-0.2.2-sources.tar.gz
+  cd mmdedit
+  ./packaging/install-macos.sh
+
+Le script construit une vraie application ~/Applications/MMdedit.app,
+adossee a un environnement virtuel Python dedie.
+
+  Emplacement    ~/Applications/MMdedit.app
+  Support        ~/Library/Application Support/MMdedit
+  Ouvrir avec    clic droit sur un .md > Ouvrir avec > MMdedit
+  Desinstaller   ./packaging/install-macos.sh --desinstaller
+
+macOS 11 (Big Sur) ou superieur. Intel et Apple Silicon.
+
+IMPORTANT : l'application n'est ni signee ni notariee par Apple. Au premier
+lancement, macOS la bloquera. Faites un clic droit dessus, choisissez
+« Ouvrir », puis confirmez. Cette manipulation n'est necessaire qu'une fois.
+
+
+CE QUI A ETE VERIFIE
+--------------------
+
+Le script Linux a ete execute reellement sur une machine Debian 12 :
+installation complete, lancement de l'application, ouverture d'un fichier,
+puis desinstallation sans aucun residu.
+
+Le script macOS n'a PAS pu etre execute, faute de Mac disponible. Sa syntaxe
+est validee et il suit la meme structure que le script Linux, mais son
+premier passage sur une machine reelle reste a faire. Signalez tout probleme.
