@@ -21,3 +21,4 @@ Thumbs.db
 # Socle Rust / Qt
 _build/
 core/target/
+.qmlls.ini

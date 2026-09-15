@@ -1,0 +1,91 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+# Socle Rust / Qt 6 de MMdedit — fabrication continue sur les quatre cibles.
+name: socle
+
+on:
+  push:
+    branches: [main, "socle/**"]
+  pull_request:
+  workflow_dispatch:
+
+env:
+  QT_VERSION: "6.8.3"
+  CARGO_TERM_COLOR: always
+
+jobs:
+  bureau:
+    name: ${{ matrix.nom }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { nom: linux,   os: ubuntu-24.04 }
+          - { nom: windows, os: windows-2022 }
+          - { nom: macos,   os: macos-14 }
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: core -> ../_build/cargo
+      - uses: jurplel/install-qt-action@v4
+        with:
+          version: ${{ env.QT_VERSION }}
+          modules: ""
+          cache: true
+      - name: Dépendances Linux
+        if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install -y libgl1-mesa-dev libxkbcommon-dev ninja-build
+      - name: MSVC
+        if: runner.os == 'Windows'
+        uses: ilammy/msvc-dev-cmd@v1
+      - name: Configuration
+        run: cmake -S . -B _build -G Ninja -DCMAKE_BUILD_TYPE=Release
+        shell: bash
+        env:
+          CMAKE_MAKE_PROGRAM: ninja
+      - name: Construction
+        run: cmake --build _build --config Release
+      - name: Test de fumée
+        run: ctest --test-dir _build --output-on-failure -C Release
+        env:
+          QT_QPA_PLATFORM: offscreen
+
+  android:
+    name: android
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-linux-android
+      - uses: jurplel/install-qt-action@v4
+        with:
+          version: ${{ env.QT_VERSION }}
+          target: android
+          arch: android_arm64_v8a
+          autodesktop: true
+          cache: true
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+      - name: Configuration
+        shell: bash
+        run: |
+          NDK="$ANDROID_SDK_ROOT/ndk/26.3.11579264"
+          [ -d "$NDK" ] || { sdkmanager "ndk;26.3.11579264"; }
+          HOST="$(dirname "$QT_ROOT_DIR")/gcc_64"
+          export CARGO_TARGET_AARCH64_LINUX_ANDROID_LINKER="$NDK/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android26-clang"
+          echo "CARGO_TARGET_AARCH64_LINUX_ANDROID_LINKER=$CARGO_TARGET_AARCH64_LINUX_ANDROID_LINKER" >> "$GITHUB_ENV"
+          "$QT_ROOT_DIR/bin/qt-cmake" -S . -B _build -G Ninja -DCMAKE_BUILD_TYPE=Release \
+            -DANDROID_SDK_ROOT="$ANDROID_SDK_ROOT" -DANDROID_NDK_ROOT="$NDK" \
+            -DQT_HOST_PATH="$HOST"
+      - name: Construction APK
+        run: cmake --build _build --target apk
+      - uses: actions/upload-artifact@v4
+        with:
+          name: mmdedit-android-arm64
+          path: _build/android-build/build/outputs/apk/**/*.apk
+          if-no-files-found: error
