@@ -39,8 +39,16 @@ if(NOT CxxQt_FOUND)
   FetchContent_MakeAvailable(CxxQt)
 endif()
 
+# En compilation croisée, Qt::qmake désigne le qmake de l'hôte : cxx-qt lirait alors les
+# en-têtes du Qt de bureau. Sous Android, on lui donne le qmake du Qt cible.
+set(MMDEDIT_QMAKE)
+if(ANDROID)
+  set(MMDEDIT_QMAKE QMAKE "${QT6_INSTALL_PREFIX}/${QT6_INSTALL_BINS}/qmake")
+endif()
+
 cxx_qt_import_crate(
   MANIFEST_PATH core/Cargo.toml
+  ${MMDEDIT_QMAKE}
   CRATES mmdedit_core
   LOCKED
   QT_MODULES Qt::Core Qt::Gui Qt::Qml Qt::Quick Qt::QuickControls2)
