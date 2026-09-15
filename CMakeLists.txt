@@ -68,9 +68,11 @@ if(NOT ANDROID)
   qt_import_qml_plugins(mmdedit)
 endif()
 
-install(TARGETS mmdedit
-  BUNDLE DESTINATION .
-  RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR})
+if(NOT ANDROID)
+  install(TARGETS mmdedit
+    BUNDLE DESTINATION .
+    RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR})
+endif()
 
 enable_testing()
 add_test(NAME smoke COMMAND mmdedit --smoke)
