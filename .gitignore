@@ -17,3 +17,7 @@ dist/
 # OS
 .DS_Store
 Thumbs.db
+
+# Socle Rust / Qt
+_build/
+core/target/
