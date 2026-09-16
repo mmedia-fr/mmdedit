@@ -234,22 +234,8 @@ jobs:
           target: default
           emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim
           disable-animations: true
-          script: |
-            set -e
-            apk=$(find _build/android-build -name '*.apk' | head -n 1)
-            test -n "$apk"
-            adb install -r "$apk"
-            adb logcat -c
-            adb shell monkey -p fr.mmedia.mmdedit -c android.intent.category.LAUNCHER 1
-            sleep 20
-            pid=$(adb shell pidof fr.mmedia.mmdedit || true)
-            adb logcat -d -t 500 > logcat.txt
-            if [ -z "$pid" ]; then
-              echo "MMdedit ne tourne plus 20 s apres son lancement :"
-              grep -iE 'mmdedit|AndroidRuntime|FATAL' logcat.txt | tail -40
-              exit 1
-            fi
-            echo "MMdedit tourne (pid $pid)"
+          # Une seule ligne : l'action exécute chaque ligne dans un shell distinct.
+          script: bash packaging/essai-android.sh
       - name: Journal de l'émulateur
         if: matrix.emulateur && failure()
         uses: actions/upload-artifact@v4
