@@ -106,8 +106,11 @@ jobs:
           # Start-Process plutôt que « & » : MMdedit est une application graphique,
           # et PowerShell ne renseigne pas $LASTEXITCODE pour celles-là — le
           # contrôle échouait alors que le programme avait bien fait son travail.
+          # Le chemin est cité : Start-Process n'entoure pas les arguments de
+          # guillemets, et un chemin contenant une espace arrivait coupé en deux
+          # — ce qui ressemblait à s'y méprendre à un défaut d'encodage.
           $p = Start-Process -FilePath ".\dist\MMdedit\MMdedit.exe" `
-            -ArgumentList "--smoke", $nom -Wait -PassThru -NoNewWindow
+            -ArgumentList "--smoke", ('"' + $nom + '"') -Wait -PassThru -NoNewWindow
           if ($p.ExitCode -ne 0) { throw "controle en echec : code $($p.ExitCode)" }
 
       - name: Dépôt de l'installeur Windows
