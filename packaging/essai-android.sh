@@ -19,6 +19,25 @@ if [ -z "$apk" ]; then
 fi
 echo "APK : $apk"
 
+# La fabrication rend un APK non signé, et Android refuse de l'installer
+# (INSTALL_PARSE_FAILED_NO_CERTIFICATES). On le signe ici avec une clé créée pour
+# ce seul essai : elle vit le temps du travail, ne sert qu'à l'émulateur, et n'a
+# rien à voir avec la clé de test conservée pour les APK publiés.
+if ! unzip -l "$apk" | grep -qE 'META-INF/.*\.(RSA|EC|DSA)'; then
+  echo "APK non signé : signature avec une clé d'essai jetable"
+  cle=$(mktemp -u /tmp/essai-XXXXXX.keystore)
+  motdepasse=essai-emulateur
+  keytool -genkeypair -keystore "$cle" -storepass "$motdepasse" -keypass "$motdepasse" \
+    -alias essai -keyalg RSA -keysize 2048 -validity 30 \
+    -dname "CN=MMdedit essai, O=M-Media, C=FR" > /dev/null
+  outils=$(ls -d "$ANDROID_SDK_ROOT"/build-tools/* | sort -V | tail -n 1)
+  aligne=$(mktemp -u /tmp/mmdedit-XXXXXX.apk)
+  "$outils/zipalign" -f -p 4 "$apk" "$aligne"
+  "$outils/apksigner" sign --ks "$cle" --ks-pass "pass:$motdepasse" \
+    --key-pass "pass:$motdepasse" --ks-key-alias essai "$aligne"
+  apk="$aligne"
+fi
+
 adb install -r "$apk"
 adb logcat -c
 adb shell monkey -p "$PAQUET" -c android.intent.category.LAUNCHER 1
