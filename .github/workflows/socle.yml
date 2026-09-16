@@ -104,9 +104,11 @@ jobs:
           version=$(sed -n 's/^project(mmdedit VERSION \([0-9.]*\).*/\1/p' CMakeLists.txt)
           cmake --install _build --prefix AppDir/usr
           install -Dm644 packaging/mmdedit.desktop AppDir/usr/share/applications/mmdedit.desktop
-          # linuxdeploy veut une icône PNG ; la nôtre est un .ico multi-tailles.
-          mkdir -p AppDir/usr/share/icons/hicolor/256x256/apps
-          convert "assets/mmdedit.ico[0]" -resize 256x256 \
+          # linuxdeploy veut une icône PNG : elle est versionnée à côté du .ico,
+          # extraite une fois pour toutes de celui-ci. ImageMagick n'est plus
+          # installé sur les runners ubuntu-24.04, et une dépendance de plus à la
+          # fabrication pour convertir une image ne se justifie pas.
+          install -Dm644 assets/mmdedit.png \
             AppDir/usr/share/icons/hicolor/256x256/apps/mmdedit.png
           base=https://github.com/linuxdeploy
           curl -sSL -o linuxdeploy.AppImage \
