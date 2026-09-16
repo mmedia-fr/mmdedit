@@ -103,8 +103,12 @@ jobs:
           $nom = Join-Path $PWD ("R" + [char]0xE9 + "union " + [char]0xE9 + [char]0xE9 + ".md")
           [IO.File]::WriteAllText($nom, "# Ete`r`n`r`nContenu accentue.", [Text.UTF8Encoding]::new($false))
           $env:QT_QPA_PLATFORM = "offscreen"
-          & ".\dist\MMdedit\MMdedit.exe" --smoke $nom
-          if ($LASTEXITCODE -ne 0) { throw "controle en echec : code $LASTEXITCODE" }
+          # Start-Process plutôt que « & » : MMdedit est une application graphique,
+          # et PowerShell ne renseigne pas $LASTEXITCODE pour celles-là — le
+          # contrôle échouait alors que le programme avait bien fait son travail.
+          $p = Start-Process -FilePath ".\dist\MMdedit\MMdedit.exe" `
+            -ArgumentList "--smoke", $nom -Wait -PassThru -NoNewWindow
+          if ($p.ExitCode -ne 0) { throw "controle en echec : code $($p.ExitCode)" }
 
       - name: Dépôt de l'installeur Windows
         if: runner.os == 'Windows'
