@@ -6,6 +6,40 @@
 //! reproduit le comportement de la version PySide6 (lecture avec repli
 //! d'encodage, écriture UTF-8 en CRLF, format déduit de l'extension).
 
+/// Aide-mémoire des balises, affiché par le menu Aide — repris tel quel de la
+/// version PySide6, où il vivait dans `style.py`.
+pub const AIDE_BALISES: &str = r#"# Rappel des balises Markdown
+
+## Titres
+`# Titre 1`  ·  `## Titre 2`  ·  `### Titre 3`
+
+## Emphase
+`**gras**`  ·  `*italique*`  ·  `` `code` ``  ·  `~~barré~~`
+
+## Listes
+- `- élément` (liste à puces)
+- `1. élément` (liste numérotée)
+- Indenter de deux espaces pour un sous-niveau.
+
+## Liens et images
+`[texte](https://exemple.fr)`
+`![texte alternatif](chemin/image.png)`
+
+## Citation
+`> ligne citée`
+
+## Bloc de code
+Entourer par trois accents graves ``` sur leur propre ligne.
+
+## Séparateur horizontal
+`---`
+
+## Tableau
+`| Colonne A | Colonne B |`
+`| --- | --- |`
+`| valeur 1 | valeur 2 |`
+"#;
+
 /// Extensions traitées comme du Markdown : aperçu rendu et coloration Markdown.
 const EXT_MARKDOWN: &[&str] = &["md", "markdown"];
 

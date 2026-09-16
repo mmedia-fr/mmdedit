@@ -10,6 +10,7 @@ import QtQuick.Dialogs
 import QtQuick.Layouts
 import Qt.labs.settings
 import fr.mmedia.mmdedit
+import fr.mmedia.mmdedit.natif
 
 ApplicationWindow {
     id: fenetre
@@ -33,6 +34,8 @@ ApplicationWindow {
     readonly property string noyau: socle.noyau
 
     Document { id: doc }
+    Edition { id: moteurEdition }
+    PontTexte { id: pont }
 
     Settings {
         category: "fenetre"
@@ -108,6 +111,22 @@ ApplicationWindow {
         onTriggered: editeur.paste()
     }
     Action {
+        id: actRechercher
+        text: qsTr("&Rechercher / Remplacer…")
+        shortcut: StandardKey.Find
+        onTriggered: dlgRecherche.ouvrir()
+    }
+    Action {
+        id: actBalises
+        text: qsTr("&Rappel des balises")
+        onTriggered: dlgBalises.open()
+    }
+    Action {
+        id: actAPropos
+        text: qsTr("À &propos")
+        onTriggered: dlgAPropos.open()
+    }
+    Action {
         id: actVoirEditeur
         text: qsTr("Afficher l'&éditeur")
         checkable: true
@@ -141,12 +160,92 @@ ApplicationWindow {
             MenuItem { action: actCouper }
             MenuItem { action: actCopier }
             MenuItem { action: actColler }
+            MenuSeparator {}
+            MenuItem { action: actRechercher }
         }
         Menu {
             title: qsTr("&Affichage")
             MenuItem { action: actVoirEditeur }
             MenuItem { action: actVoirApercu }
         }
+        Menu {
+            title: qsTr("A&ide")
+            MenuItem { action: actBalises }
+            MenuItem { action: actAPropos }
+        }
+    }
+
+    // ------------------------------------------------------- mise en forme
+    // Chaque bouton est une bascule : recliquer retire le style posé, et passer
+    // d'un niveau de titre à un autre remplace le précédent (cf. core/edition.rs).
+    header: ToolBar {
+        RowLayout {
+            anchors.fill: parent
+            anchors.leftMargin: 4
+            anchors.rightMargin: 4
+            spacing: 2
+
+            Repeater {
+                model: [
+                    { texte: qsTr("Gras"), aide: qsTr("Gras — **texte** (Ctrl+B)"), marqueur: "**" },
+                    { texte: qsTr("Italique"), aide: qsTr("Italique — *texte* (Ctrl+I)"), marqueur: "*" },
+                    { texte: qsTr("Barré"), aide: qsTr("Barré — ~~texte~~"), marqueur: "~~" },
+                    { texte: qsTr("Code"), aide: qsTr("Code en ligne — `texte`"), marqueur: "`" }
+                ]
+                ToolButton {
+                    text: modelData.texte
+                    ToolTip.text: modelData.aide
+                    ToolTip.visible: hovered
+                    ToolTip.delay: 600
+                    onClicked: fenetre.encadrer(modelData.marqueur)
+                }
+            }
+            ToolSeparator {}
+            Repeater {
+                model: [
+                    { texte: qsTr("Titre 1"), aide: qsTr("Titre de niveau 1 — # texte"), prefixe: "# " },
+                    { texte: qsTr("Titre 2"), aide: qsTr("Titre de niveau 2 — ## texte"), prefixe: "## " },
+                    { texte: qsTr("Titre 3"), aide: qsTr("Titre de niveau 3 — ### texte"), prefixe: "### " },
+                    { texte: qsTr("Liste"), aide: qsTr("Liste à puces — - élément"), prefixe: "- " },
+                    { texte: qsTr("Numérotée"), aide: qsTr("Liste numérotée — 1. élément"), prefixe: "1. " },
+                    { texte: qsTr("Citation"), aide: qsTr("Citation — > texte"), prefixe: "> " }
+                ]
+                ToolButton {
+                    text: modelData.texte
+                    ToolTip.text: modelData.aide
+                    ToolTip.visible: hovered
+                    ToolTip.delay: 600
+                    onClicked: fenetre.prefixer(modelData.prefixe)
+                }
+            }
+            ToolSeparator {}
+            ToolButton {
+                text: qsTr("Lien")
+                ToolTip.text: qsTr("Insérer un lien — [texte](url)")
+                ToolTip.visible: hovered
+                ToolTip.delay: 600
+                onClicked: fenetre.entourer("[", "](https://)")
+            }
+            ToolButton {
+                text: qsTr("Image")
+                ToolTip.text: qsTr("Insérer une image — ![texte](chemin)")
+                ToolTip.visible: hovered
+                ToolTip.delay: 600
+                onClicked: fenetre.entourer("![", "](chemin.png)")
+            }
+            Item { Layout.fillWidth: true }
+        }
+    }
+
+    // Les raccourcis de mise en forme ne sont pas portés par les boutons : ils
+    // doivent agir quel que soit ce qui a le focus.
+    Shortcut {
+        sequence: "Ctrl+B"
+        onActivated: fenetre.encadrer("**")
+    }
+    Shortcut {
+        sequence: "Ctrl+I"
+        onActivated: fenetre.encadrer("*")
     }
 
     // ------------------------------------------------------------------- vues
@@ -303,6 +402,40 @@ ApplicationWindow {
         onButtonClicked: doc.oublierErreur()
     }
 
+    DialogueRecherche {
+        id: dlgRecherche
+        moteur: moteurEdition
+        cible: editeur
+        onInformation: function (texte) { fenetre.flash(texte) }
+    }
+
+    DialogueTexte {
+        id: dlgBalises
+        title: qsTr("Rappel des balises")
+        contenu: socle.aideBalises()
+    }
+
+    DialogueTexte {
+        id: dlgAPropos
+        title: qsTr("À propos")
+        formatTexte: TextEdit.RichText
+        contenu: "<b>MMdedit</b> " + socle.version + "<br><br>"
+                 + qsTr("Lecteur / éditeur Markdown — outil M-Media.<br>"
+                        + "Noyau Rust, interface Qt 6 / QML ; rendu Markdown natif Qt.")
+                 + "<p><b>" + qsTr("Licence") + "</b> — "
+                 + qsTr("Ce programme est un <b>logiciel libre</b>, distribué selon les termes "
+                        + "de la <b>Licence Publique Générale GNU, version 3</b> ou ultérieure.")
+                 + "</p><p>"
+                 + qsTr("Il est fourni <b>sans aucune garantie</b>, dans la mesure permise par "
+                        + "la loi. Vous êtes libre de l'utiliser, de l'étudier, de le modifier "
+                        + "et de le redistribuer, à condition d'accorder les mêmes libertés à "
+                        + "ceux à qui vous le transmettez, code source inclus.")
+                 + "</p><p>"
+                 + qsTr("Texte complet : fichier <code>LICENSE</code> livré avec le programme, ou ")
+                 + "<a href=\"https://www.gnu.org/licenses/gpl-3.0.html\">gnu.org/licenses/gpl-3.0</a>."
+                 + "</p><p>" + qsTr("Qt est distribué sous licence LGPL v3 par le Qt Project.") + "</p>"
+    }
+
     // Une erreur du noyau se voit aussitôt, d'où qu'elle vienne.
     Connections {
         target: doc
@@ -332,6 +465,31 @@ ApplicationWindow {
         apercu.text = rendu
         largeurRendue = apercu.width
         compteurs.text = doc.statistiques(editeur.text)
+    }
+
+    // Applique un plan rendu par le noyau : on retire puis on insère, plutôt que
+    // de réassigner tout le texte, pour que Ctrl+Z défasse l'opération seule.
+    function appliquerPlan(plan) {
+        pont.appliquer(editeur.textDocument, plan.debut, plan.fin, plan.remplacement)
+        if (plan.selectionLongueur > 0)
+            editeur.select(plan.selectionDebut, plan.selectionDebut + plan.selectionLongueur)
+        else
+            editeur.cursorPosition = plan.selectionDebut
+        editeur.forceActiveFocus()
+    }
+
+    function encadrer(marqueur) {
+        appliquerPlan(moteurEdition.encadrement(editeur.text, editeur.selectionStart,
+                                                editeur.selectionEnd, marqueur))
+    }
+
+    function prefixer(prefixe) {
+        appliquerPlan(moteurEdition.prefixe(editeur.text, editeur.cursorPosition, prefixe))
+    }
+
+    function entourer(avant, apres) {
+        appliquerPlan(moteurEdition.entourer(editeur.text, editeur.selectionStart,
+                                             editeur.selectionEnd, avant, apres))
     }
 
     // Au moins une des deux vues reste visible.
@@ -427,6 +585,40 @@ ApplicationWindow {
     // en argument est bien arrivé jusqu'à lui.
     function texteCourant() {
         return editeur.text
+    }
+
+    // Contrôle d'intégration : exerce la chaîne complète — noyau Rust, plan,
+    // application sur le TextArea, annulation. Rend « ok » ou l'écart constaté.
+    // Appelé par --smoke, il écrase le document : sans danger, rien n'est écrit
+    // sur disque et le programme s'arrête juste après.
+    function controleEdition() {
+        var ecarts = []
+        function verifier(quoi, obtenu, attendu) {
+            if (obtenu !== attendu)
+                ecarts.push(quoi + " : « " + obtenu + " » au lieu de « " + attendu + " »")
+        }
+
+        chargementEnCours = true
+        editeur.text = "un mot ici"
+        editeur.select(3, 6)
+        encadrer("**")
+        verifier("encadrement", editeur.text, "un **mot** ici")
+        // La sélection doit tenir entre les marqueurs, pour qu'un second clic annule.
+        encadrer("**")
+        verifier("bascule", editeur.text, "un mot ici")
+        editeur.cursorPosition = 4
+        prefixer("## ")
+        verifier("prefixe", editeur.text, "## un mot ici")
+        editeur.undo()
+        verifier("annulation", editeur.text, "un mot ici")
+        verifier("recherche", moteurEdition.chercher(editeur.text, "mot", 0, false, false, false), 3)
+        var remplace = moteurEdition.remplacerTout(editeur.text, "mot", "texte", false, false)
+        verifier("remplacement", remplace.texte, "un texte ici")
+
+        editeur.text = ""
+        chargementEnCours = false
+        modifie = false
+        return ecarts.length === 0 ? "ok" : ecarts.join(" ; ")
     }
 
     Component.onCompleted: {

@@ -10,6 +10,9 @@
 #include <QtQml/QQmlApplicationEngine>
 #include <QtQml/QQmlContext>
 #include <QtQuick/QQuickWindow>
+#include <QtQml/qqml.h>
+
+#include "pont_texte.h"
 #include <QtGui/QImage>
 
 #include <cstdio>
@@ -39,6 +42,10 @@ int main(int argc, char* argv[])
   QCoreApplication::setOrganizationDomain(QStringLiteral("mmedia.fr"));
   QCoreApplication::setApplicationVersion(QStringLiteral(MMDEDIT_VERSION));
   QGuiApplication::setWindowIcon(QIcon(QStringLiteral(":/assets/mmdedit.ico")));
+
+  // Type natif exposé à QML : il donne accès au QTextDocument du TextArea, hors
+  // de portée du QML et du noyau Rust. URI distinct de celui du module cxx-qt.
+  qmlRegisterType<PontTexte>("fr.mmedia.mmdedit.natif", 1, 0, "PontTexte");
 
   QQmlApplicationEngine engine;
   // L'URL est vide si aucun fichier n'est donné, ou si le chemin ne désigne rien :
@@ -89,7 +96,17 @@ int main(int argc, char* argv[])
         QCoreApplication::exit(3);
         return;
       }
-      QCoreApplication::exit(fichierInitial.isEmpty() || !charge.toString().isEmpty() ? 0 : 4);
+      if (!fichierInitial.isEmpty() && charge.toString().isEmpty()) {
+        QCoreApplication::exit(4);
+        return;
+      }
+      // Édition assistée : le contrôle est écrit en QML, là où il peut agir sur
+      // le TextArea comme le ferait un clic sur la barre d'outils.
+      QVariant edition;
+      QMetaObject::invokeMethod(racine, "controleEdition", Q_RETURN_ARG(QVariant, edition));
+      std::printf("smoke: edition %s\n", qPrintable(edition.toString()));
+      std::fflush(stdout);
+      QCoreApplication::exit(edition.toString() == QStringLiteral("ok") ? 0 : 7);
     });
   }
 
