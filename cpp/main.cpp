@@ -21,7 +21,35 @@
 #include "presse_papier.h"
 #include <QtGui/QImage>
 
+#ifdef Q_OS_WIN
+#  include <windows.h>  // GetCommandLineW / CommandLineToArgvW
+#  include <shellapi.h>
+#endif
+
 #include <cstdio>
+
+/// Arguments du programme, en Unicode et sans perte.
+///
+/// Sous Windows, la seule source fiable est la ligne de commande native :
+/// `argv` est encodé dans la page de code ANSI. Ailleurs, argv est déjà de
+/// l'UTF-8 et QCoreApplication::arguments() convient.
+static QStringList argumentsUnicode()
+{
+#ifdef Q_OS_WIN
+  int nombre = 0;
+  LPWSTR* natifs = CommandLineToArgvW(GetCommandLineW(), &nombre);
+  if (!natifs)
+    return QCoreApplication::arguments();
+  QStringList liste;
+  liste.reserve(nombre);
+  for (int i = 0; i < nombre; ++i)
+    liste.append(QString::fromWCharArray(natifs[i]));
+  LocalFree(natifs);
+  return liste;
+#else
+  return QCoreApplication::arguments();
+#endif
+}
 
 int main(int argc, char* argv[])
 {
@@ -39,12 +67,13 @@ int main(int argc, char* argv[])
   // Fichier passé en ligne de commande : c'est ainsi que Windows lance MMdedit
   // depuis « Ouvrir avec » (la commande enregistrée est « MMdedit.exe "%1" »).
   QString fichier;
-  // Les arguments sont lus par Qt, et non dans argv : sous Windows, argv arrive
-  // dans la page de code ANSI, qui remplace par « ? » tout ce qu'elle ne sait pas
-  // représenter. Un fichier au nom accentué devenait introuvable, ou s'ouvrait
-  // sous un nom faux. QCoreApplication::arguments() lit la ligne de commande
-  // Unicode du système.
-  const QStringList arguments = QCoreApplication::arguments();
+  // Les arguments ne sont pas lus dans argv : sous Windows, il arrive dans la
+  // page de code ANSI, qui remplace par « ? » tout ce qu'elle ne sait pas
+  // représenter — un fichier « Réunion été.md » n'était alors jamais ouvert.
+  // QCoreApplication::arguments() ne suffit pas : mesuré sur le banc, il rend
+  // encore la version dégradée. On demande donc la ligne de commande Unicode à
+  // Windows lui-même.
+  const QStringList arguments = argumentsUnicode();
   for (int i = 1; i < arguments.size(); ++i) {
     const QString argument = arguments.at(i);
     if (argument == QStringLiteral("--smoke"))
@@ -89,7 +118,7 @@ int main(int argc, char* argv[])
 
   if (smoke) {
     // Contrôle de fabrication : la fenêtre QML est créée et l'objet Rust répond.
-    QTimer::singleShot(0, &app, [&engine, fichierInitial] {
+    QTimer::singleShot(0, &app, [&engine, fichierInitial, fichier] {
       if (engine.rootObjects().isEmpty()) {
         std::fprintf(stderr, "smoke: aucune fenetre creee\n");
         QCoreApplication::exit(1);
@@ -119,6 +148,7 @@ int main(int argc, char* argv[])
       }
       if (!fichierInitial.isEmpty() && charge.toString().isEmpty()) {
         std::fprintf(stderr, "smoke: le fichier donne en argument n'est pas arrive dans l'editeur\n");
+        std::fprintf(stderr, "smoke: argument recu = %s\n", fichier.toUtf8().constData());
         QCoreApplication::exit(4);
         return;
       }
