@@ -66,7 +66,7 @@ jobs:
           # Le nom du fichier compte : les associations « Ouvrir avec » posées par
           # l'installeur désignent MMdedit.exe, pas le nom de la cible CMake.
           cp _build/mmdedit.exe dist/MMdedit/MMdedit.exe
-          "$QT_ROOT_DIR/bin/windeployqt.exe" --release --qmldir qml dist/MMdedit/MMdedit.exe
+          "$QT_ROOT_DIR/bin/windeployqt.exe" --release --qmldir core/qml dist/MMdedit/MMdedit.exe
           iscc="/c/Program Files (x86)/Inno Setup 6/ISCC.exe"
           test -f "$iscc"
           # Double barre : sous Git Bash, « /DAppVersion=… » serait pris pour un
