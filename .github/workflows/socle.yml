@@ -47,10 +47,37 @@ jobs:
           CMAKE_MAKE_PROGRAM: ninja
       - name: Construction
         run: cmake --build _build --config Release
+      - name: Tests du noyau
+        run: cargo test --manifest-path core/Cargo.toml
       - name: Test de fumée
         run: ctest --test-dir _build --output-on-failure -C Release
         env:
           QT_QPA_PLATFORM: offscreen
+
+      # ---- empaquetage Windows : c'est la cible que les postes reçoivent ----
+      - name: Paquet Windows
+        if: runner.os == 'Windows'
+        shell: bash
+        run: |
+          set -euo pipefail
+          version=$(sed -n 's/^project(mmdedit VERSION \([0-9.]*\).*/\1/p' CMakeLists.txt)
+          test -n "$version"
+          mkdir -p dist/MMdedit
+          # Le nom du fichier compte : les associations « Ouvrir avec » posées par
+          # l'installeur désignent MMdedit.exe, pas le nom de la cible CMake.
+          cp _build/mmdedit.exe dist/MMdedit/MMdedit.exe
+          "$QT_ROOT_DIR/bin/windeployqt.exe" --release --qmldir qml dist/MMdedit/MMdedit.exe
+          iscc="/c/Program Files (x86)/Inno Setup 6/ISCC.exe"
+          test -f "$iscc"
+          "$iscc" "/DAppVersion=$version" build/socle-mmdedit.iss
+          test -f "dist/MMdedit-$version-setup.exe"
+      - name: Dépôt de l'installeur
+        if: runner.os == 'Windows'
+        uses: actions/upload-artifact@v4
+        with:
+          name: mmdedit-windows-setup
+          path: dist/*-setup.exe
+          if-no-files-found: error
 
   android:
     name: android
