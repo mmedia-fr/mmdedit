@@ -93,6 +93,19 @@ jobs:
           ./dist/MMdedit/MMdedit.exe --smoke "Réunion été.md"
         env:
           QT_QPA_PLATFORM: offscreen
+      - name: Contrôle Windows — chemin absolu accentué, lancé par PowerShell
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          # Reproduit le cas réel : un poste lance MMdedit avec le chemin complet
+          # d'un fichier accentué. Le contrôle en bash ci-dessus ne le couvrait
+          # pas — il passait un chemin relatif, et le défaut survivait.
+          $nom = Join-Path $PWD ("R" + [char]0xE9 + "union " + [char]0xE9 + [char]0xE9 + ".md")
+          [IO.File]::WriteAllText($nom, "# Ete`r`n`r`nContenu accentue.", [Text.UTF8Encoding]::new($false))
+          $env:QT_QPA_PLATFORM = "offscreen"
+          & ".\dist\MMdedit\MMdedit.exe" --smoke $nom
+          if ($LASTEXITCODE -ne 0) { throw "controle en echec : code $LASTEXITCODE" }
+
       - name: Dépôt de l'installeur Windows
         if: runner.os == 'Windows'
         uses: actions/upload-artifact@v4
