@@ -36,6 +36,13 @@ ApplicationWindow {
     Document { id: doc }
     Edition { id: moteurEdition }
     PontTexte { id: pont }
+    PressePapier { id: pressePapier }
+    ReglePressePapier { id: reglePresse }
+
+    Settings {
+        category: "edition"
+        property alias copieAuto: actCopieAuto.checked
+    }
 
     Settings {
         category: "fenetre"
@@ -71,6 +78,15 @@ ApplicationWindow {
         onTriggered: fenetre.enregistrerSous()
     }
     Action {
+        id: actExportPdf
+        text: qsTr("Exporter en &PDF…")
+        onTriggered: {
+            dlgPdf.currentFile = doc.cheminExport(".pdf") !== ""
+                    ? "file://" + doc.cheminExport(".pdf") : ""
+            dlgPdf.open()
+        }
+    }
+    Action {
         id: actQuitter
         text: qsTr("&Quitter")
         shortcut: StandardKey.Quit
@@ -102,13 +118,26 @@ ApplicationWindow {
         shortcut: StandardKey.Copy
         // Copier depuis l'aperçu doit marcher aussi : sans cela, un Ctrl+C fait
         // dans le rendu n'écrivait rien et le presse-papier gardait l'ancien contenu.
-        onTriggered: apercu.selectedText.length > 0 ? apercu.copy() : editeur.copy()
+        onTriggered: {
+            var depuisRendu = apercu.selectedText.length > 0
+            reglePresse.annoncer(depuisRendu ? "rendu" : "saisie", fenetre.maintenant())
+            if (depuisRendu)
+                apercu.copy()
+            else
+                editeur.copy()
+        }
     }
     Action {
         id: actColler
         text: qsTr("Co&ller")
         shortcut: StandardKey.Paste
         onTriggered: editeur.paste()
+    }
+    Action {
+        id: actCopieAuto
+        text: qsTr("Copier la &sélection automatiquement")
+        checkable: true
+        checked: true
     }
     Action {
         id: actRechercher
@@ -150,6 +179,8 @@ ApplicationWindow {
             MenuItem { action: actEnregistrer }
             MenuItem { action: actEnregistrerSous }
             MenuSeparator {}
+            MenuItem { action: actExportPdf }
+            MenuSeparator {}
             MenuItem { action: actQuitter }
         }
         Menu {
@@ -162,6 +193,8 @@ ApplicationWindow {
             MenuItem { action: actColler }
             MenuSeparator {}
             MenuItem { action: actRechercher }
+            MenuSeparator {}
+            MenuItem { action: actCopieAuto }
         }
         Menu {
             title: qsTr("&Affichage")
@@ -273,6 +306,9 @@ ApplicationWindow {
                         fenetre.modifie = true
                     minuteurApercu.restart()
                 }
+                // La sélection est copiée quand elle se stabilise, pas à chaque
+                // pixel du glisser de souris.
+                onSelectedTextChanged: fenetre.selectionChangee("saisie")
             }
         }
 
@@ -296,6 +332,10 @@ ApplicationWindow {
                 // redimensionnement doit donc refaire le rendu, pas seulement la
                 // mise à l'échelle (cf. rafraichir()).
                 onWidthChanged: minuteurApercu.restart()
+                // L'aperçu est une source de sélection au même titre que la saisie :
+                // c'est de là qu'on copie une phrase mise en forme plutôt que sa
+                // source Markdown.
+                onSelectedTextChanged: fenetre.selectionChangee("rendu")
                 // Le rendu suit le texte avec un temps de retard (minuteurApercu) :
                 // le recalculer à chaque frappe fait ramer dès quelques pages.
             }
@@ -327,6 +367,37 @@ ApplicationWindow {
             Label { text: doc.libelle }
             Label { text: doc.encodage }
             Label { id: compteurs; text: doc.statistiques("") }
+            Label {
+                // Origine du contenu du presse-papier, et délai pendant lequel la
+                // copie automatique ne l'écrasera pas.
+                text: reglePresse.restant > 0
+                      ? reglePresse.libelle + " (" + reglePresse.restant + " s)"
+                      : reglePresse.libelle
+            }
+        }
+    }
+
+    // Copie automatique : la sélection part au presse-papier une fois stabilisée.
+    Timer {
+        id: minuteurSelection
+        interval: 300
+        repeat: false
+        onTriggered: fenetre.copierSelectionAuto()
+    }
+
+    // Compte à rebours de la protection, affiché en barre d'état.
+    Timer {
+        id: minuteurProtection
+        interval: 1000
+        repeat: true
+        running: reglePresse.restant > 0
+        onTriggered: reglePresse.rafraichir(fenetre.maintenant())
+    }
+
+    Connections {
+        target: pressePapier
+        function onChange() {
+            reglePresse.depot(pressePapier.texte, fenetre.maintenant())
         }
     }
 
@@ -372,6 +443,20 @@ ApplicationWindow {
                 fenetre.flash(qsTr("Enregistré."))
                 fenetre.poursuivre()
             }
+        }
+    }
+
+    FileDialog {
+        id: dlgPdf
+        title: qsTr("Exporter en PDF")
+        fileMode: FileDialog.SaveFile
+        defaultSuffix: "pdf"
+        nameFilters: [qsTr("PDF (*.pdf)")]
+        onAccepted: {
+            if (pont.exporterPdf(selectedFile, editeur.text, doc.estMarkdown()))
+                fenetre.flash(qsTr("PDF exporté."))
+            else
+                fenetre.flash(qsTr("Export PDF impossible."))
         }
     }
 
@@ -467,6 +552,35 @@ ApplicationWindow {
         compteurs.text = doc.statistiques(editeur.text)
     }
 
+    // Heure en secondes, telle que l'attend la règle du presse-papier.
+    function maintenant() {
+        return Date.now() / 1000
+    }
+
+    // Source de la dernière sélection : « saisie » ou « rendu ».
+    property string sourceSelection: "saisie"
+
+    function selectionChangee(source) {
+        if (!actCopieAuto.checked)
+            return
+        sourceSelection = source
+        minuteurSelection.restart()
+    }
+
+    function copierSelectionAuto() {
+        if (!actCopieAuto.checked)
+            return
+        var vue = sourceSelection === "rendu" ? apercu : editeur
+        var selection = vue.selectedText
+        if (selection.length === 0)
+            return
+        // Un contenu déposé par un tiers est protégé : on ne l'écrase pas.
+        if (!reglePresse.peutEcraser(maintenant()))
+            return
+        pressePapier.deposer(selection)
+        reglePresse.ecriture(selection, sourceSelection, maintenant())
+    }
+
     // Applique un plan rendu par le noyau : on retire puis on insère, plutôt que
     // de réassigner tout le texte, pour que Ctrl+Z défasse l'opération seule.
     function appliquerPlan(plan) {
@@ -501,6 +615,8 @@ ApplicationWindow {
     // Applique au document ouvert ce que son format impose : pas d'aperçu rendu
     // hors Markdown, et l'éditeur reprend alors toute la fenêtre.
     function appliquerFormat() {
+        // La coloration suit le format du fichier : Markdown, XML, ou aucune.
+        pont.colorer(editeur.textDocument, doc.format)
         actVoirApercu.checked = doc.estMarkdown()
         if (!actVoirApercu.checked)
             actVoirEditeur.checked = true
@@ -615,6 +731,24 @@ ApplicationWindow {
         var remplace = moteurEdition.remplacerTout(editeur.text, "mot", "texte", false, false)
         verifier("remplacement", remplace.texte, "un texte ici")
 
+        // Copie automatique : la sélection part au presse-papier, sauf si un
+        // contenu étranger y a été déposé depuis moins d'une minute.
+        editeur.text = "phrase a copier"
+        editeur.select(0, 6)
+        sourceSelection = "saisie"
+        copierSelectionAuto()
+        verifier("copie auto", pressePapier.texte, "phrase")
+
+        // Un tiers dépose : on écrit vraiment dans le presse-papier, puis on le
+        // signale à la règle comme le ferait le signal du système.
+        pressePapier.deposer("venu d'ailleurs")
+        reglePresse.depot(pressePapier.texte, maintenant())
+        verifier("protection", reglePresse.peutEcraser(maintenant()), false)
+        editeur.select(7, 8)
+        copierSelectionAuto()
+        // Le presse-papier doit avoir gardé le contenu étranger.
+        verifier("protection effective", pressePapier.texte, "venu d'ailleurs")
+
         editeur.text = ""
         chargementEnCours = false
         modifie = false
@@ -622,6 +756,7 @@ ApplicationWindow {
     }
 
     Component.onCompleted: {
+        pont.colorer(editeur.textDocument, doc.format)
         // « MMdedit fichier.md », et le « Ouvrir avec » de Windows qui s'y ramène.
         if (typeof fichierInitial !== "undefined" && fichierInitial.toString().length > 0)
             charger(fichierInitial)

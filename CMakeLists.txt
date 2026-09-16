@@ -66,7 +66,7 @@ cxx_qt_import_qml_module(mmdedit_qml_module
 # — sans quoi l'explorateur et les raccourcis affichent une icône générique.
 # Le .h figure dans les sources pour qu'AUTOMOC le traite : sans cela, la classe
 # QObject qu'il declare n'a pas de metaobjet et l'edition de liens echoue.
-set(MMDEDIT_SOURCES cpp/main.cpp cpp/pont_texte.h)
+set(MMDEDIT_SOURCES cpp/main.cpp cpp/pont_texte.h cpp/colorateur.h cpp/presse_papier.h)
 if(WIN32)
   list(APPEND MMDEDIT_SOURCES build/mmdedit.rc)
 endif()

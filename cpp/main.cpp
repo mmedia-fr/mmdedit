@@ -1,6 +1,9 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 #include <QtCore/QCoreApplication>
+#include <QtCore/QDir>
+#include <QtCore/QFile>
 #include <QtCore/QFileInfo>
+#include <QtCore/QTemporaryFile>
 #include <QtCore/QString>
 #include <QtCore/QTimer>
 #include <QtCore/QUrl>
@@ -13,6 +16,7 @@
 #include <QtQml/qqml.h>
 
 #include "pont_texte.h"
+#include "presse_papier.h"
 #include <QtGui/QImage>
 
 #include <cstdio>
@@ -46,6 +50,7 @@ int main(int argc, char* argv[])
   // Type natif exposé à QML : il donne accès au QTextDocument du TextArea, hors
   // de portée du QML et du noyau Rust. URI distinct de celui du module cxx-qt.
   qmlRegisterType<PontTexte>("fr.mmedia.mmdedit.natif", 1, 0, "PontTexte");
+  qmlRegisterType<PressePapier>("fr.mmedia.mmdedit.natif", 1, 0, "PressePapier");
 
   QQmlApplicationEngine engine;
   // L'URL est vide si aucun fichier n'est donné, ou si le chemin ne désigne rien :
@@ -106,7 +111,25 @@ int main(int argc, char* argv[])
       QMetaObject::invokeMethod(racine, "controleEdition", Q_RETURN_ARG(QVariant, edition));
       std::printf("smoke: edition %s\n", qPrintable(edition.toString()));
       std::fflush(stdout);
-      QCoreApplication::exit(edition.toString() == QStringLiteral("ok") ? 0 : 7);
+      if (edition.toString() != QStringLiteral("ok")) {
+        QCoreApplication::exit(7);
+        return;
+      }
+
+      // Export PDF : contrôlé ici, où l'on peut relire le fichier produit.
+      QTemporaryFile sortie(QDir::tempPath() + QStringLiteral("/mmdedit-XXXXXX.pdf"));
+      sortie.open();
+      const QString cheminPdf = sortie.fileName();
+      sortie.close();
+      PontTexte pont;
+      const bool ecrit = pont.exporterPdf(QUrl::fromLocalFile(cheminPdf),
+                                          QStringLiteral("# Titre\n\nUn paragraphe."), true);
+      QFile relu(cheminPdf);
+      const bool entete = relu.open(QIODevice::ReadOnly) && relu.read(4) == QByteArray("%PDF");
+      std::printf("smoke: pdf ecrit=%d entete=%d taille=%lld\n", ecrit, entete,
+                  static_cast<long long>(QFileInfo(cheminPdf).size()));
+      std::fflush(stdout);
+      QCoreApplication::exit(ecrit && entete ? 0 : 8);
     });
   }
 

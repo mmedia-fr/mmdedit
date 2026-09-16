@@ -8,6 +8,6 @@ fn main() {
             "../qml/DialogueTexte.qml",
         ]))
         .qt_module("Qml")
-        .files(["src/socle.rs", "src/document.rs", "src/pont_edition.rs"])
+        .files(["src/socle.rs", "src/document.rs", "src/pont_edition.rs", "src/pont_presse_papier.rs"])
         .build();
 }
