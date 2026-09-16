@@ -20,6 +20,61 @@ ApplicationWindow {
     visible: true
     title: (modifie ? "*" : "") + doc.nom + " — MMdedit"
 
+    // Apparence courante : « classique », « moderne » ou « systeme ».
+    //
+    // Les trois jeux reprennent ceux de la version PySide6, qui les posait par
+    // feuille de style Qt (QSS) — sans équivalent en QML. Ici, c'est la palette
+    // et les polices qui changent ; le style Qt Quick Controls est Fusion, seul
+    // à honorer une palette sur toutes les plateformes (cf. cpp/main.cpp).
+    // « systeme » ne pose aucune surcharge : la palette reste celle que Qt a
+    // donnée, c'est-à-dire celle du bureau.
+    property string apparence: "classique"
+
+    readonly property var jeuxApparence: ({
+        "classique": {
+            libelle: qsTr("Classique (Windows 9x)"),
+            fond: "#d4d0c8", texte: "#000000", base: "#ffffff",
+            bouton: "#d4d0c8", surbrillance: "#000080", texteSurbrillance: "#ffffff",
+            police: "MS Shell Dlg 2", taille: 9, mono: "Courier New", tailleMono: 11
+        },
+        "moderne": {
+            libelle: qsTr("Moderne (M-Media)"),
+            fond: "#f6f7f8", texte: "#231f20", base: "#ffffff",
+            bouton: "#ffffff", surbrillance: "#21abe3", texteSurbrillance: "#ffffff",
+            police: "Segoe UI", taille: 10, mono: "Cascadia Mono", tailleMono: 11
+        },
+        "systeme": { libelle: qsTr("Système (aspect natif)") }
+    })
+
+    // Nul pour « systeme » : c'est ce qui coupe les surcharges ci-dessous.
+    readonly property var jeu: apparence === "systeme" ? null : jeuxApparence[apparence]
+
+    // Surcharges conditionnelles plutôt qu'affectations directes : quand « when »
+    // redevient faux, RestoreBindingOrValue rend la valeur d'origine — c'est ce
+    // qui permet de revenir à l'apparence du bureau sans redémarrer.
+    Instantiator {
+        model: [
+            { propriete: "palette.window", clef: "fond" },
+            { propriete: "palette.base", clef: "base" },
+            { propriete: "palette.text", clef: "texte" },
+            { propriete: "palette.windowText", clef: "texte" },
+            { propriete: "palette.button", clef: "bouton" },
+            { propriete: "palette.buttonText", clef: "texte" },
+            { propriete: "palette.highlight", clef: "surbrillance" },
+            { propriete: "palette.highlightedText", clef: "texteSurbrillance" },
+            { propriete: "font.family", clef: "police" },
+            { propriete: "font.pointSize", clef: "taille" }
+        ]
+        delegate: Binding {
+            required property var modelData
+            target: fenetre
+            property: modelData.propriete
+            value: fenetre.jeu ? fenetre.jeu[modelData.clef] : ""
+            when: fenetre.jeu !== null
+            restoreMode: Binding.RestoreBindingOrValue
+        }
+    }
+
     // Le document a-t-il changé depuis sa dernière écriture ? QML en est seul
     // juge : c'est le TextArea qui édite le texte, le noyau ne le détient pas.
     property bool modifie: false
@@ -38,6 +93,11 @@ ApplicationWindow {
     PontTexte { id: pont }
     PressePapier { id: pressePapier }
     ReglePressePapier { id: reglePresse }
+
+    Settings {
+        category: "apparence"
+        property alias theme: fenetre.apparence
+    }
 
     Settings {
         category: "edition"
@@ -155,6 +215,19 @@ ApplicationWindow {
         text: qsTr("À &propos")
         onTriggered: dlgAPropos.open()
     }
+    // Une apparence par entrée de menu, exclusives entre elles.
+    Instantiator {
+        id: actionsApparence
+        model: ["classique", "moderne", "systeme"]
+        delegate: Action {
+            required property string modelData
+            text: fenetre.jeuxApparence[modelData].libelle
+            checkable: true
+            checked: fenetre.apparence === modelData
+            onTriggered: fenetre.choisirApparence(modelData)
+        }
+    }
+
     Action {
         id: actVoirEditeur
         text: qsTr("Afficher l'&éditeur")
@@ -200,6 +273,14 @@ ApplicationWindow {
             title: qsTr("&Affichage")
             MenuItem { action: actVoirEditeur }
             MenuItem { action: actVoirApercu }
+            MenuSeparator {}
+            Menu {
+                title: qsTr("A&pparence")
+                Repeater {
+                    model: actionsApparence.count
+                    MenuItem { action: actionsApparence.objectAt(index) }
+                }
+            }
         }
         Menu {
             title: qsTr("A&ide")
@@ -299,8 +380,11 @@ ApplicationWindow {
                 wrapMode: TextEdit.NoWrap
                 selectByMouse: true
                 persistentSelection: true
-                font.family: "monospace"
-                font.pointSize: 11
+                // Fond de saisie explicite : dans un ScrollView, Fusion laisse le
+                // TextArea transparent, et la zone prendrait la couleur de fenêtre.
+                background: Rectangle { color: fenetre.palette.base }
+                font.family: fenetre.jeu && fenetre.jeu.mono ? fenetre.jeu.mono : "monospace"
+                font.pointSize: fenetre.jeu && fenetre.jeu.tailleMono ? fenetre.jeu.tailleMono : 11
                 onTextChanged: {
                     if (!fenetre.chargementEnCours)
                         fenetre.modifie = true
@@ -325,6 +409,7 @@ ApplicationWindow {
                 persistentSelection: true
                 textFormat: TextEdit.MarkdownText
                 wrapMode: TextEdit.Wrap
+                background: Rectangle { color: fenetre.palette.base }
                 // Sans largeur imposée, le document rendu prend sa largeur naturelle
                 // et les tableaux Markdown sortent écrasés sur quelques pixels.
                 width: volet_apercu.availableWidth
@@ -606,6 +691,11 @@ ApplicationWindow {
                                              editeur.selectionEnd, avant, apres))
     }
 
+    function choisirApparence(nom) {
+        apparence = nom
+        flash(qsTr("Apparence : %1.").arg(jeuxApparence[nom].libelle))
+    }
+
     // Au moins une des deux vues reste visible.
     function basculerVue(bascule, autre) {
         if (!bascule.checked && !autre.checked)
@@ -748,6 +838,15 @@ ApplicationWindow {
         copierSelectionAuto()
         // Le presse-papier doit avoir gardé le contenu étranger.
         verifier("protection effective", pressePapier.texte, "venu d'ailleurs")
+
+        // Apparences : la palette doit suivre le choix, et « systeme » la rendre.
+        var fondSysteme = palette.window
+        choisirApparence("classique")
+        verifier("apparence classique", palette.window.toString(), "#d4d0c8")
+        choisirApparence("moderne")
+        verifier("apparence moderne", palette.window.toString(), "#f6f7f8")
+        choisirApparence("systeme")
+        verifier("apparence systeme", palette.window.toString(), fondSysteme.toString())
 
         editeur.text = ""
         chargementEnCours = false

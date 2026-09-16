@@ -13,6 +13,7 @@
 #include <QtQml/QQmlApplicationEngine>
 #include <QtQml/QQmlContext>
 #include <QtQuick/QQuickWindow>
+#include <QtQuickControls2/QQuickStyle>
 #include <QtQml/qqml.h>
 
 #include "pont_texte.h"
@@ -51,6 +52,12 @@ int main(int argc, char* argv[])
   // de portée du QML et du noyau Rust. URI distinct de celui du module cxx-qt.
   qmlRegisterType<PontTexte>("fr.mmedia.mmdedit.natif", 1, 0, "PontTexte");
   qmlRegisterType<PressePapier>("fr.mmedia.mmdedit.natif", 1, 0, "PressePapier");
+
+  // Fusion plutôt que le style natif : c'est le seul à honorer une palette sur
+  // les quatre cibles, et les apparences de MMdedit (classique, moderne) n'ont
+  // pas d'autre moyen de s'appliquer depuis QML — la version PySide6 les posait
+  // par feuille de style Qt, sans équivalent ici.
+  QQuickStyle::setStyle(QStringLiteral("Fusion"));
 
   QQmlApplicationEngine engine;
   // L'URL est vide si aucun fichier n'est donné, ou si le chemin ne désigne rien :
