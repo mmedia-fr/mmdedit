@@ -84,7 +84,13 @@ jobs:
       - name: Contrôle du paquet Windows
         if: runner.os == 'Windows'
         shell: bash
-        run: ./dist/MMdedit/MMdedit.exe --smoke
+        run: |
+          set -euo pipefail
+          # Nom ET contenu accentués : sous Windows, les arguments arrivaient dans
+          # la page de code ANSI et un fichier « Réunion été.md » n'était jamais
+          # ouvert — la fenêtre s'affichait vide, sans rien dire.
+          printf '# Été\n\nCoût : 12,50 €.\n' > "Réunion été.md"
+          ./dist/MMdedit/MMdedit.exe --smoke "Réunion été.md"
         env:
           QT_QPA_PLATFORM: offscreen
       - name: Dépôt de l'installeur Windows
@@ -129,7 +135,8 @@ jobs:
         run: |
           set -euo pipefail
           export APPIMAGE_EXTRACT_AND_RUN=1
-          QT_QPA_PLATFORM=offscreen ./dist/MMdedit-*-x86_64.AppImage --smoke
+          printf '# Été\n\nCoût : 12,50 €.\n' > "Réunion été.md"
+          QT_QPA_PLATFORM=offscreen ./dist/MMdedit-*-x86_64.AppImage --smoke "Réunion été.md"
       - name: Dépôt de l'AppImage
         if: runner.os == 'Linux'
         uses: actions/upload-artifact@v4
@@ -158,7 +165,9 @@ jobs:
       - name: Contrôle du paquet macOS
         if: runner.os == 'macOS'
         shell: bash
-        run: QT_QPA_PLATFORM=offscreen ./dist/MMdedit.app/Contents/MacOS/mmdedit --smoke
+        run: |
+          printf '# Été\n\nCoût : 12,50 €.\n' > "Réunion été.md"
+          QT_QPA_PLATFORM=offscreen ./dist/MMdedit.app/Contents/MacOS/mmdedit --smoke "Réunion été.md"
       - name: Dépôt de l'image disque macOS
         if: runner.os == 'macOS'
         uses: actions/upload-artifact@v4

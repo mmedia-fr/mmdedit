@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 # Socle Rust / Qt 6 de MMdedit — chaîne de fabrication à vide (fenêtre minimale).
 cmake_minimum_required(VERSION 3.24)
-project(mmdedit VERSION 0.4.0 LANGUAGES CXX)
+project(mmdedit VERSION 0.4.1 LANGUAGES CXX)
 
 if(CMAKE_CXX_COMPILER_ID STREQUAL "MSVC")
   set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreadedDLL")

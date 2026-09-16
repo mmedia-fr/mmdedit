@@ -5,6 +5,7 @@
 #include <QtCore/QFileInfo>
 #include <QtCore/QTemporaryFile>
 #include <QtCore/QString>
+#include <QtCore/QStringList>
 #include <QtCore/QTimer>
 #include <QtCore/QUrl>
 #include <QtCore/QVariant>
@@ -21,10 +22,16 @@
 #include <QtGui/QImage>
 
 #include <cstdio>
-#include <cstring>
 
 int main(int argc, char* argv[])
 {
+  QGuiApplication app(argc, argv);
+  QCoreApplication::setApplicationName(QStringLiteral("MMdedit"));
+  QCoreApplication::setOrganizationName(QStringLiteral("M-Media"));
+  QCoreApplication::setOrganizationDomain(QStringLiteral("mmedia.fr"));
+  QCoreApplication::setApplicationVersion(QStringLiteral(MMDEDIT_VERSION));
+  QGuiApplication::setWindowIcon(QIcon(QStringLiteral(":/assets/mmdedit.ico")));
+
   bool smoke = false;
   // Capture de la fenêtre dans un fichier PNG, puis sortie : sert à juger
   // l'interface depuis une machine sans écran (la plateforme « offscreen » suffit).
@@ -32,21 +39,21 @@ int main(int argc, char* argv[])
   // Fichier passé en ligne de commande : c'est ainsi que Windows lance MMdedit
   // depuis « Ouvrir avec » (la commande enregistrée est « MMdedit.exe "%1" »).
   QString fichier;
-  for (int i = 1; i < argc; ++i) {
-    if (std::strcmp(argv[i], "--smoke") == 0)
+  // Les arguments sont lus par Qt, et non dans argv : sous Windows, argv arrive
+  // dans la page de code ANSI, qui remplace par « ? » tout ce qu'elle ne sait pas
+  // représenter. Un fichier au nom accentué devenait introuvable, ou s'ouvrait
+  // sous un nom faux. QCoreApplication::arguments() lit la ligne de commande
+  // Unicode du système.
+  const QStringList arguments = QCoreApplication::arguments();
+  for (int i = 1; i < arguments.size(); ++i) {
+    const QString argument = arguments.at(i);
+    if (argument == QStringLiteral("--smoke"))
       smoke = true;
-    else if (std::strcmp(argv[i], "--capture") == 0 && i + 1 < argc)
-      capture = QString::fromLocal8Bit(argv[++i]);
+    else if (argument == QStringLiteral("--capture") && i + 1 < arguments.size())
+      capture = arguments.at(++i);
     else if (fichier.isEmpty())
-      fichier = QString::fromLocal8Bit(argv[i]);
+      fichier = argument;
   }
-
-  QGuiApplication app(argc, argv);
-  QCoreApplication::setApplicationName(QStringLiteral("MMdedit"));
-  QCoreApplication::setOrganizationName(QStringLiteral("M-Media"));
-  QCoreApplication::setOrganizationDomain(QStringLiteral("mmedia.fr"));
-  QCoreApplication::setApplicationVersion(QStringLiteral(MMDEDIT_VERSION));
-  QGuiApplication::setWindowIcon(QIcon(QStringLiteral(":/assets/mmdedit.ico")));
 
   // Type natif exposé à QML : il donne accès au QTextDocument du TextArea, hors
   // de portée du QML et du noyau Rust. URI distinct de celui du module cxx-qt.
@@ -60,10 +67,12 @@ int main(int argc, char* argv[])
   QQuickStyle::setStyle(QStringLiteral("Fusion"));
 
   QQmlApplicationEngine engine;
-  // L'URL est vide si aucun fichier n'est donné, ou si le chemin ne désigne rien :
-  // ouvrir à l'aveugle afficherait une erreur de lecture au démarrage.
+  // Un fichier donné en argument est transmis tel quel, même s'il n'existe pas :
+  // le noyau rend alors « Lecture impossible » et l'utilisateur voit pourquoi sa
+  // fenêtre est vide. L'ignorer en silence masquait le défaut d'encodage des
+  // arguments — un nom accentué n'était tout simplement jamais ouvert.
   QUrl fichierInitial;
-  if (!fichier.isEmpty() && QFileInfo::exists(fichier))
+  if (!fichier.isEmpty())
     fichierInitial = QUrl::fromLocalFile(QFileInfo(fichier).absoluteFilePath());
   engine.rootContext()->setContextProperty(QStringLiteral("fichierInitial"), fichierInitial);
 
@@ -96,8 +105,8 @@ int main(int argc, char* argv[])
       // chemin complet — lecture, décodage, affichage — et non le seul noyau.
       QVariant charge;
       QMetaObject::invokeMethod(racine, "texteCourant", Q_RETURN_ARG(QVariant, charge));
-      std::printf("smoke: %s | %s | %lld caracteres lus\n", qPrintable(noyau),
-                  qPrintable(comptes.toString()),
+      std::printf("smoke: %s | %s | %lld caracteres lus\n", noyau.toUtf8().constData(),
+                  comptes.toString().toUtf8().constData(),
                   static_cast<long long>(charge.toString().size()));
       std::fflush(stdout);
       if (!noyau.startsWith(QStringLiteral("mmdedit_core"))) {
@@ -109,6 +118,7 @@ int main(int argc, char* argv[])
         return;
       }
       if (!fichierInitial.isEmpty() && charge.toString().isEmpty()) {
+        std::fprintf(stderr, "smoke: le fichier donne en argument n'est pas arrive dans l'editeur\n");
         QCoreApplication::exit(4);
         return;
       }
@@ -116,7 +126,7 @@ int main(int argc, char* argv[])
       // le TextArea comme le ferait un clic sur la barre d'outils.
       QVariant edition;
       QMetaObject::invokeMethod(racine, "controleEdition", Q_RETURN_ARG(QVariant, edition));
-      std::printf("smoke: edition %s\n", qPrintable(edition.toString()));
+      std::printf("smoke: edition %s\n", edition.toString().toUtf8().constData());
       std::fflush(stdout);
       if (edition.toString() != QStringLiteral("ok")) {
         QCoreApplication::exit(7);
