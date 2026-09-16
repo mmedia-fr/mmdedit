@@ -72,8 +72,12 @@ if(WIN32)
 endif()
 
 qt_add_executable(mmdedit ${MMDEDIT_SOURCES})
+# --no-zstd : le Qt officiel pour Android est construit sans zstd, et un qrc
+# compresse ainsi y laisse un « undefined symbol: qt_resourceFeatureZstd » a
+# l'edition de liens. Une icone ne se compresse de toute facon pas.
 qt_add_resources(mmdedit "ressources"
   PREFIX "/"
+  OPTIONS --no-zstd
   FILES assets/mmdedit.ico)
 target_link_libraries(mmdedit PRIVATE mmdedit_qml_module Qt::Quick Qt::QuickControls2
                                       Qt::QuickDialogs2 Qt::LabsSettings)

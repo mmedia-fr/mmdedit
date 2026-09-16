@@ -69,7 +69,9 @@ jobs:
           "$QT_ROOT_DIR/bin/windeployqt.exe" --release --qmldir qml dist/MMdedit/MMdedit.exe
           iscc="/c/Program Files (x86)/Inno Setup 6/ISCC.exe"
           test -f "$iscc"
-          "$iscc" "/DAppVersion=$version" build/socle-mmdedit.iss
+          # Double barre : sous Git Bash, « /DAppVersion=… » serait pris pour un
+          # chemin et converti, et ISCC y verrait un second nom de script.
+          "$iscc" "//DAppVersion=$version" build/socle-mmdedit.iss
           test -f "dist/MMdedit-$version-setup.exe"
       - name: Dépôt de l'installeur
         if: runner.os == 'Windows'
