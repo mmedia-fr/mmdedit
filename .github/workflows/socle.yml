@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
-# Socle Rust / Qt 6 de MMdedit — fabrication continue sur les quatre cibles.
+# MMdedit (Rust / Qt 6) — fabrication continue : Windows, Linux, Android, et macOS par portabilité.
 #
 # Chaque cible se construit, s'éprouve (test de fumée : il exerce l'édition et
 # relit le PDF produit) puis s'empaquette. Le contrôle porte aussi sur le paquet,
@@ -79,7 +79,7 @@ jobs:
           test -f "$iscc"
           # Double barre : sous Git Bash, « /DAppVersion=… » serait pris pour un
           # chemin et converti, et ISCC y verrait un second nom de script.
-          "$iscc" "//DAppVersion=$version" build/socle-mmdedit.iss
+          "$iscc" "//DAppVersion=$version" build/mmdedit.iss
           test -f "dist/MMdedit-$version-setup.exe"
       - name: Contrôle du paquet Windows
         if: runner.os == 'Windows'

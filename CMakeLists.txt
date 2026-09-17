@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
-# Socle Rust / Qt 6 de MMdedit — chaîne de fabrication à vide (fenêtre minimale).
+# MMdedit — noyau Rust (core/), interface Qt 6 / QML.
 cmake_minimum_required(VERSION 3.24)
 project(mmdedit VERSION 0.4.1 LANGUAGES CXX)
 

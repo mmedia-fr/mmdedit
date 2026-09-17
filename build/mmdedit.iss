@@ -1,20 +1,19 @@
-﻿; Installeur Windows de MMdedit (Inno Setup 6).
+﻿; Installeur Windows de MMdedit — socle Rust / Qt 6 (Inno Setup 6).
 ;
 ; Compilation :
-;   build\build.bat installeur      (construit l'exe puis l'installeur)
-;   ou : ISCC.exe build\mmdedit.iss
+;   ISCC.exe /DAppVersion=0.4.1 build\mmdedit.iss
 ;
-; Prérequis : dist\MMdedit.exe doit exister (cf. build\build.bat).
+; Prérequis : dist\MMdedit\ doit contenir MMdedit.exe et les bibliothèques Qt
+; déposées par windeployqt (cf. le workflow « socle », étape « Paquet Windows »).
 ; Sortie    : dist\MMdedit-<version>-setup.exe
 ;
-; Choix d'intégration : MMdedit s'ajoute à la liste « Ouvrir avec » des
-; fichiers .md/.markdown/.txt via OpenWithProgids. Il ne s'impose PAS comme
-; application par défaut — l'association existante de l'utilisateur est
-; conservée. Windows reste seul juge du défaut, comme il se doit depuis
-; Windows 8.
+; L'AppId est celui de l'ancienne version PySide6 : une machine qui la porte encore
+; reçoit celle-ci comme une mise à jour, et non comme un second programme.
 
+#ifndef AppVersion
+  #define AppVersion "0.4.1"
+#endif
 #define AppName        "MMdedit"
-#define AppVersion     "0.3.0"
 #define AppPublisher   "M-Media"
 #define AppExe         "MMdedit.exe"
 #define ProgId         "MMedia.MMdedit.1"
@@ -31,7 +30,7 @@ UninstallDisplayIcon={app}\{#AppExe}
 UninstallDisplayName={#AppName} {#AppVersion}
 OutputDir=..\dist
 OutputBaseFilename={#AppName}-{#AppVersion}-setup
-SetupIconFile=..\src\mmdedit\assets\mmdedit.ico
+SetupIconFile=..\assets\mmdedit.ico
 ; Licence presentee a l'installation (exigence morale du copyleft : l'utilisateur
 ; doit savoir sous quels termes il recoit le programme).
 LicenseFile=..\LICENSE
@@ -40,18 +39,10 @@ SolidCompression=yes
 WizardStyle=modern
 ; Installation dans le profil par défaut (aucune élévation exigée) ; l'assistant
 ; propose l'installation pour tous les utilisateurs si on dispose de l'admin.
-; Sans « lowest », Inno réclamerait l'élévation d'office.
 PrivilegesRequired=lowest
 ; « commandline » déclare /ALLUSERS et /CURRENTUSER recevables en ligne de
-; commande. Tout déploiement automatisé en dépend : il s'exécute sous SYSTEM et
-; exige une installation machine-wide — sans quoi le programme atterrirait dans
-; le profil de SYSTEM, invisible pour les utilisateurs et inopérant sur un
-; serveur de bureaux à distance multi-session.
-; Mesuré sur banc le 2026-07-24 : avec « dialog » seul, /VERYSILENT /ALLUSERS
-; installait déjà correctement dans {commonpf} (Inno tranche de lui-même quand
-; le dialogue est supprimé et que les droits admin sont là). La déclaration
-; explicite ne corrige donc pas un défaut constaté : elle fixe le contrat au
-; lieu de le laisser dépendre d'un arbitrage implicite non documenté pour ce cas.
+; commande : tout déploiement automatisé en dépend (il s'exécute sous SYSTEM et
+; exige une installation pour la machine entière).
 PrivilegesRequiredOverridesAllowed=commandline dialog
 ArchitecturesInstallIn64BitMode=x64compatible
 ArchitecturesAllowed=x64compatible
@@ -68,7 +59,9 @@ Name: "associer"; Description: "Proposer {#AppName} dans « Ouvrir avec » pour 
     GroupDescription: "Intégration à Windows :"
 
 [Files]
-Source: "..\dist\{#AppExe}"; DestDir: "{app}"; Flags: ignoreversion
+; Le dossier entier : le programme, les bibliothèques Qt et les greffons QML.
+Source: "..\dist\MMdedit\*"; DestDir: "{app}"; \
+    Flags: ignoreversion recursesubdirs createallsubdirs
 Source: "..\README.md";      DestDir: "{app}"; Flags: ignoreversion isreadme
 Source: "..\LICENSE";        DestDir: "{app}"; Flags: ignoreversion
 
@@ -78,7 +71,6 @@ Name: "{autodesktop}\{#AppName}";  Filename: "{app}\{#AppExe}"; Tasks: desktopic
 
 [Registry]
 ; --- Type de fichier propre à MMdedit -------------------------------------
-; Décrit une fois, réutilisé par chaque extension via OpenWithProgids.
 Root: HKA; Subkey: "Software\Classes\{#ProgId}"; \
     ValueType: string; ValueName: ""; ValueData: "Document Markdown"; \
     Flags: uninsdeletekey; Tasks: associer
@@ -101,8 +93,6 @@ Root: HKA; Subkey: "Software\Classes\.txt\OpenWithProgids"; \
     Flags: uninsdeletevalue; Tasks: associer
 
 ; --- Application enregistrée (onglet « Ouvrir avec » complet) --------------
-; uninsdeletekey porte sur la clé RACINE Applications\MMdedit.exe : posé sur la
-; seule sous-clé « command », il laissait la clé parente derrière lui.
 Root: HKA; Subkey: "Software\Classes\Applications\{#AppExe}"; \
     ValueType: string; ValueName: "FriendlyAppName"; ValueData: "{#AppName}"; \
     Flags: uninsdeletekey; Tasks: associer

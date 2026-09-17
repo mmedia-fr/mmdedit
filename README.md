@@ -1,7 +1,7 @@
 # MMdedit
 
 Lecteur et éditeur Markdown léger, dans l'esprit du bloc-notes, pour Windows,
-Linux et macOS. Logiciel libre sous **GNU GPL v3**.
+Linux et Android. Logiciel libre sous **GNU GPL v3**.
 
 ---
 
@@ -64,13 +64,11 @@ L'aperçu reste rouvrable à la main par le menu *Affichage*.
 - **Copier / Couper / Coller suivent la vue qui a le focus.** L'aperçu étant en
   lecture seule, seul *Copier* y agit.
 - **Apparence au choix** (*Affichage > Apparence*), appliquée à chaud et
-  mémorisée : **Classique (Windows 9x)**, défaut sur Windows et Linux ;
-  **Moderne**, surfaces plates et coins arrondis ; **Système**, aucune feuille
-  de style, l'aspect natif de la plateforme — défaut sur macOS.
-- **Réglages conservés d'une session à l'autre** : taille et position de la
-  fenêtre, partage éditeur / aperçu, copie automatique, apparence. Écrits par
-  QSettings (`HKCU\Software\M-Media\MMdedit` sous Windows,
-  `~/.config/M-Media/MMdedit.conf` ailleurs).
+  mémorisée : **Classique (Windows 9x)**, **Moderne** (M-Media), ou **Système**,
+  qui reprend la palette du bureau. Les contrôles sont dessinés par le style
+  Fusion de Qt sur toutes les plateformes.
+- **Réglages conservés d'une session à l'autre** : géométrie de la fenêtre,
+  copie automatique, apparence.
 - **Compteur** mots / caractères / lignes en barre d'état.
 - **Export PDF** du rendu.
 - **Avertissement de sauvegarde** à la fermeture si des modifications sont en
@@ -80,44 +78,43 @@ L'aperçu reste rouvrable à la main par le menu *Affichage*.
 
 ## Encodage
 
-- Lecture : UTF-8 en priorité, repli automatique cp1252 puis latin-1.
+- Lecture : UTF-8 en priorité, repli strict CP1252 puis Latin-1.
 - Écriture : UTF-8 sans BOM, fins de ligne normalisées en CRLF.
+- Les positions échangées avec Qt se comptent en unités UTF-16 : un document
+  contenant un emoji ne décale pas la mise en forme.
 
-## Exécution depuis les sources
+## Téléchargement
 
-```bash
-python -m pip install -r requirements.txt
-python run_mmdedit.py           # ou : python -m mmdedit  (depuis src/)
-```
+Chaque version est publiée en **release GitHub**, avec ses sources :
+
+| Plateforme | Paquet |
+|---|---|
+| Windows | `MMdedit-<version>-setup.exe` (Inno Setup) |
+| Linux | `MMdedit-<version>-x86_64.AppImage` |
+| Android | `MMdedit-<version>-android-arm64.apk` |
+
+macOS est construit et contrôlé en intégration continue, par portabilité du
+code, mais n'est pas distribué.
 
 ## Installation sous Windows
 
-`dist\MMdedit.exe` seul est **autonome** et n'écrit rien dans le registre :
-aucune association, aucun raccourci. L'intégration passe par l'installeur
-`dist\MMdedit-<version>-setup.exe` (Inno Setup), qui pose :
+L'installeur pose :
 
-- le programme dans `%LOCALAPPDATA%\Programs\MMdedit` (aucune élévation
-  requise ; l'assistant propose l'installation pour tous les utilisateurs si
-  l'on dispose des droits d'administration) ;
+- le programme et le Qt dont il dépend dans `%LOCALAPPDATA%\Programs\MMdedit`
+  (aucune élévation requise ; l'assistant propose l'installation pour tous les
+  utilisateurs si l'on dispose des droits d'administration) ;
 - un raccourci au menu Démarrer, et sur le Bureau si la case est cochée ;
 - MMdedit dans la liste **« Ouvrir avec »** des `.md`, `.markdown` et `.txt` ;
 - une entrée de désinstallation dans *Programmes et fonctionnalités*.
 
 L'installeur **ne s'impose pas comme application par défaut** : il s'ajoute à
-`OpenWithProgids` sans toucher au `UserChoice` de l'utilisateur. Choisir
-MMdedit comme application par défaut reste une action explicite, via *Ouvrir
-avec > Toujours utiliser cette application*.
+`OpenWithProgids` sans toucher au `UserChoice` de l'utilisateur.
 
-Installation et désinstallation silencieuses **pour l'utilisateur courant** :
-
-```bat
-MMdedit-<version>-setup.exe /VERYSILENT /MERGETASKS=associer
-"%LOCALAPPDATA%\Programs\MMdedit\unins000.exe" /VERYSILENT
-```
+Son identifiant (`AppId`) est celui des versions PySide6 antérieures à 0.4 :
+un poste qui en porte une reçoit celle-ci comme une mise à jour.
 
 Installation silencieuse **pour tous les utilisateurs** — la forme à retenir
-pour un déploiement automatisé, qui s'exécute généralement sous le compte
-SYSTEM :
+pour un déploiement automatisé, généralement exécuté sous SYSTEM :
 
 ```bat
 MMdedit-<version>-setup.exe /VERYSILENT /SUPPRESSMSGBOXES /NORESTART /ALLUSERS /MERGETASKS=associer
@@ -126,109 +123,78 @@ MMdedit-<version>-setup.exe /VERYSILENT /SUPPRESSMSGBOXES /NORESTART /ALLUSERS /
 
 `/ALLUSERS` n'est pas cosmétique : sans lui, `PrivilegesRequired=lowest`
 installe dans le profil du compte appelant — celui de SYSTEM lors d'un
-déploiement, invisible pour les utilisateurs et inopérant sur un serveur de
-bureaux à distance multi-session.
+déploiement, invisible des utilisateurs et inopérant sur un serveur de bureaux
+à distance.
 
-Depuis 0.2.2, le script déclare `PrivilegesRequiredOverridesAllowed=commandline
-dialog`, qui rend `/ALLUSERS` explicitement recevable. Mesure faite le
-2026-07-24 : avec `dialog` seul (versions ≤ 0.2.1), `/VERYSILENT /ALLUSERS`
-installait **déjà** dans `C:\Program Files\MMdedit` avec les clés HKLM — Inno
-tranche de lui-même quand le dialogue est supprimé et que les droits
-d'administration sont présents. La déclaration explicite ne répare donc rien :
-elle fixe le contrat plutôt que de le laisser reposer sur un arbitrage
-implicite et non documenté pour ce cas.
-
-## Installation sous Linux et macOS
-
-Il n'existe pas de binaire pour ces plateformes : PyInstaller ne fait pas de
-compilation croisée. L'installation part des **sources**, prise en charge de
-bout en bout par un script — rien à compiler à la main.
+## Installation sous Linux
 
 ```bash
-tar xzf MMdedit-<version>-sources.tar.gz && cd mmdedit
-./packaging/install-linux.sh      # ou install-macos.sh
+chmod +x MMdedit-<version>-x86_64.AppImage
+./MMdedit-<version>-x86_64.AppImage [fichier]
 ```
 
-Les deux scripts créent un environnement virtuel dédié, y installent PySide6,
-copient le programme et posent l'intégration au bureau, **sans privilège
-administrateur** ni modification du Python du système. Chacun accepte
-`--desinstaller` pour tout retirer.
+## Installation sous Android
 
-| | Linux | macOS |
-|---|---|---|
-| Programme | `~/.local/share/mmdedit` | `~/Library/Application Support/MMdedit` |
-| Lancement | `mmdedit [fichier]` | `~/Applications/MMdedit.app` |
-| Intégration | entrée de menu `.desktop` + icônes hicolor (7 tailles) | bundle `.app` + icône `.icns` + types de documents |
+L'APK s'installe après avoir autorisé les sources inconnues pour l'application
+qui l'ouvre (navigateur, gestionnaire de fichiers).
 
-**État de validation** : le script Linux a été **exécuté sur une Debian 12** —
-installation, lancement, ouverture de fichier, désinstallation sans résidu. Le
-script macOS n'a **pas** pu être exécuté faute de Mac ; sa syntaxe est validée
-et sa structure identique, mais son premier passage réel reste à faire.
+## Construction
 
-L'application n'étant ni signée ni notariée, macOS bloque le premier
-lancement : clic droit sur l'application puis « Ouvrir », une seule fois.
-
-## Construction de l'exécutable
-
-PyInstaller ne fait pas de compilation croisée : construire sur la plateforme
-cible.
-
-- Windows : `build\build.bat` → `dist\MMdedit.exe`, puis
-  `build\build.bat installeur` pour enchaîner sur l'installeur. Requiert Inno
-  Setup 6 (`winget install JRSoftware.InnoSetup`).
-- Linux / macOS : `build/build.sh` → `dist/MMdedit`.
-
-Le code source est identique sur les trois plateformes, PySide6 étant
-multiplateforme. Seul l'empaquetage est à relancer par système.
-
-Les binaires **ne sont pas versionnés** : un exécutable de ~47 Mo committé à
-chaque version gonflerait l'historique git définitivement, sans diff possible.
-`dist/` est ignoré, et les binaires sont publiés en **release GitHub**.
-
-## Icône
-
-`build/make_icon.py` régénère `src/mmdedit/assets/mmdedit.ico` à partir d'un
-logo passé en argument : il isole le glyphe rouge par détection de teinte, le
-centre sur un carré transparent et écrit sept résolutions (16 à 256 px). À
-relancer seulement si le logo change.
+Prérequis : Rust ≥ 1.85, Qt ≥ 6.4 (Core, Gui, Qml, Quick, QuickControls2,
+QuickDialogs2, LabsSettings), CMake ≥ 3.24, Ninja. La liaison Rust ↔ Qt passe
+par [cxx-qt](https://github.com/KDAB/cxx-qt) 0.10, récupéré par CMake.
 
 ```bash
-python build/make_icon.py chemin/du/logo.png
+cmake -S . -B _build -G Ninja -DCMAKE_BUILD_TYPE=Release
+cmake --build _build
 ```
+
+Sous Android, configurer avec le `qt-cmake` du Qt Android, `ANDROID_SDK_ROOT`,
+`ANDROID_NDK_ROOT` et `QT_HOST_PATH`, puis construire la cible `apk`. La recette
+complète de chaque cible — dont l'empaquetage — est dans
+`.github/workflows/socle.yml`.
 
 ## Vérifications
 
-```bat
-python tests\run_tests.py
+```bash
+cargo test --manifest-path core/Cargo.toml                      # noyau
+QT_QPA_PLATFORM=offscreen ctest --test-dir _build --output-on-failure  # fumée
 ```
 
-Six suites pilotent une vraie fenêtre Qt en mode *offscreen* — aucune fenêtre
-n'apparaît — et exercent le rendu, l'encodage, l'export PDF, la bascule des
-vues, la barre d'outils, les formats, le presse-papier et les réglages
-persistants. Elles ont mis au jour trois défauts réels : boutons de titres
-inopérants sous PySide6 6.11, icône absente de l'exécutable empaqueté, italique
-appliqué sur du gras qui le dégradait.
+Le test de fumée (`mmdedit --smoke`) exerce une vraie fenêtre sans écran :
+encadrement, bascules, annulation, recherche, remplacement, copie automatique
+et sa protection, les trois apparences, puis relit le PDF produit.
+`mmdedit --capture fichier.png` rend la fenêtre en image.
+
+L'intégration continue le fait tourner **sur le paquet déployé** (dossier
+windeployqt, AppImage), ouvre un fichier au nom et au contenu accentués, et
+installe puis lance l'APK sur un émulateur Android 34.
+
+## Arborescence
+
+| Dossier | Contenu |
+|---|---|
+| `core/` | noyau Rust (`mmdedit_core`) et interface QML (`core/qml/`) |
+| `cpp/` | point d'entrée et objets natifs Qt (texte, colorateur, presse-papier) |
+| `build/` | installeur Inno Setup et ressources Windows |
+| `packaging/` | fichier `.desktop`, contrôle de l'APK sur émulateur |
+| `assets/` | icônes |
 
 ## Licence
 
 **GNU General Public License version 3** ou ultérieure — copyleft. Texte
-intégral dans [`LICENSE`](LICENSE), rappelé dans *Aide > À propos* (bouton
-« Afficher les détails ») et présenté à l'installation.
+intégral dans [`LICENSE`](LICENSE), présenté à l'installation.
 
-Concrètement : quiconque reçoit le programme peut l'utiliser, l'étudier, le
-modifier et le redistribuer, **à condition d'accorder les mêmes libertés**,
-code source inclus, sous la même licence.
+Quiconque reçoit le programme peut l'utiliser, l'étudier, le modifier et le
+redistribuer, **à condition d'accorder les mêmes libertés**, code source
+inclus, sous la même licence.
 
-Seule la version anglaise de la GPL a valeur juridique — la FSF ne publie que
-des traductions *non officielles*, à titre informatif. C'est pourquoi `LICENSE`
-est en anglais, le sens de la licence étant expliqué en français dans *À
-propos*.
+Qt est sous **LGPL v3**, compatible avec la GPL v3 ; cxx-qt est sous licence
+MIT ou Apache 2.0.
 
-Qt et PySide6 sont sous **LGPL v3**, compatible avec la GPL v3. L'exécutable
-`--onefile` embarquant Qt, sa redistribution est couverte par cette
-combinaison.
+## Historique
 
-## Pile technique
-
-PySide6 (Qt). Rendu Markdown et export PDF assurés nativement par Qt
-(`QTextDocument.setMarkdown`, `QPrinter`), sans dépendance supplémentaire.
+Jusqu'à la 0.3.0, MMdedit était écrit en Python (PySide6) et empaqueté par
+PyInstaller. La cible Android, que Qt for Python ne dessert pas de façon
+fiable, a imposé le passage à Rust / Qt 6 en 0.4.0. Le code PySide6 reste
+consultable sous l'étiquette `v0.2.2`.
