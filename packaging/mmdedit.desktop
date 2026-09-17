@@ -1,0 +1,11 @@
+[Desktop Entry]
+Type=Application
+Name=MMdedit
+GenericName=Éditeur Markdown
+Comment=Lecteur et éditeur Markdown — outil M-Media
+Exec=mmdedit %f
+Icon=mmdedit
+Categories=Office;TextEditor;Utility;
+MimeType=text/markdown;text/plain;
+Terminal=false
+StartupWMClass=mmdedit

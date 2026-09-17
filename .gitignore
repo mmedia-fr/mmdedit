@@ -1,18 +1,9 @@
-# Python
-__pycache__/
-*.py[cod]
-*.egg-info/
-.venv/
-venv/
-
-# PyInstaller — artefacts uniquement ; les scripts build/build.* sont versionnés.
-# Le .gitignore racine du dépôt exclut « build/ » : on ré-inclut ce dossier-ci,
-# sinon les scripts de build sont silencieusement ignorés (cas du commit 71a0fe8).
 !build/
-build/MMdedit/
-build/*.spec
+# Fabrication
+_build/
+core/target/
 dist/
-*.spec.bak
+.qmlls.ini
 
 # OS
 .DS_Store

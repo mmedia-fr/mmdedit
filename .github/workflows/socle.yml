@@ -1,0 +1,281 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+# MMdedit (Rust / Qt 6) — fabrication continue : Windows, Linux, Android, et macOS par portabilité.
+#
+# Chaque cible se construit, s'éprouve (test de fumée : il exerce l'édition et
+# relit le PDF produit) puis s'empaquette. Le contrôle porte aussi sur le paquet,
+# et non sur le seul binaire de construction : c'est le paquet qui part aux postes.
+name: socle
+
+on:
+  push:
+    branches: [main, "socle/**"]
+  pull_request:
+  workflow_dispatch:
+
+env:
+  QT_VERSION: "6.8.3"
+  CARGO_TERM_COLOR: always
+
+jobs:
+  bureau:
+    name: ${{ matrix.nom }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { nom: linux,   os: ubuntu-24.04 }
+          - { nom: windows, os: windows-2022 }
+          - { nom: macos,   os: macos-14 }
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: core -> ../_build/cargo
+      - uses: jurplel/install-qt-action@v4
+        with:
+          version: ${{ env.QT_VERSION }}
+          modules: ""
+          cache: true
+      - name: Dépendances Linux
+        if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install -y libgl1-mesa-dev libxkbcommon-dev ninja-build
+      - name: MSVC
+        if: runner.os == 'Windows'
+        uses: ilammy/msvc-dev-cmd@v1
+      - name: Configuration
+        run: cmake -S . -B _build -G Ninja -DCMAKE_BUILD_TYPE=Release
+        shell: bash
+        env:
+          CMAKE_MAKE_PROGRAM: ninja
+      - name: Construction
+        run: cmake --build _build --config Release
+      - name: Tests du noyau
+        run: cargo test --manifest-path core/Cargo.toml
+      - name: Test de fumée
+        run: ctest --test-dir _build --output-on-failure -C Release
+        env:
+          QT_QPA_PLATFORM: offscreen
+
+      # ---- Windows : l'installeur que reçoivent les postes -----------------
+      - name: Paquet Windows
+        if: runner.os == 'Windows'
+        shell: bash
+        run: |
+          set -euo pipefail
+          version=$(sed -n 's/^project(mmdedit VERSION \([0-9.]*\).*/\1/p' CMakeLists.txt)
+          test -n "$version"
+          mkdir -p dist/MMdedit
+          # Le nom du fichier compte : les associations « Ouvrir avec » posées par
+          # l'installeur désignent MMdedit.exe, pas le nom de la cible CMake.
+          cp _build/mmdedit.exe dist/MMdedit/MMdedit.exe
+          "$QT_ROOT_DIR/bin/windeployqt.exe" --release --qmldir core/qml dist/MMdedit/MMdedit.exe
+          # windeployqt ne dépose que qwindows.dll : sans la plateforme offscreen,
+          # rien ne peut être contrôlé sans session ouverte — ni ici, ni sur un
+          # poste, où c'est le seul moyen de vérifier une installation à distance.
+          cp "$QT_ROOT_DIR/plugins/platforms/qoffscreen.dll" dist/MMdedit/platforms/
+          iscc="/c/Program Files (x86)/Inno Setup 6/ISCC.exe"
+          test -f "$iscc"
+          # Double barre : sous Git Bash, « /DAppVersion=… » serait pris pour un
+          # chemin et converti, et ISCC y verrait un second nom de script.
+          "$iscc" "//DAppVersion=$version" build/mmdedit.iss
+          test -f "dist/MMdedit-$version-setup.exe"
+      - name: Contrôle du paquet Windows
+        if: runner.os == 'Windows'
+        shell: bash
+        run: |
+          set -euo pipefail
+          # Nom ET contenu accentués : sous Windows, les arguments arrivaient dans
+          # la page de code ANSI et un fichier « Réunion été.md » n'était jamais
+          # ouvert — la fenêtre s'affichait vide, sans rien dire.
+          printf '# Été\n\nCoût : 12,50 €.\n' > "Réunion été.md"
+          ./dist/MMdedit/MMdedit.exe --smoke "Réunion été.md"
+        env:
+          QT_QPA_PLATFORM: offscreen
+      - name: Contrôle Windows — chemin absolu accentué, lancé par PowerShell
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          # Reproduit le cas réel : un poste lance MMdedit avec le chemin complet
+          # d'un fichier accentué. Le contrôle en bash ci-dessus ne le couvrait
+          # pas — il passait un chemin relatif, et le défaut survivait.
+          $nom = Join-Path $PWD ("R" + [char]0xE9 + "union " + [char]0xE9 + [char]0xE9 + ".md")
+          [IO.File]::WriteAllText($nom, "# Ete`r`n`r`nContenu accentue.", [Text.UTF8Encoding]::new($false))
+          $env:QT_QPA_PLATFORM = "offscreen"
+          # Start-Process plutôt que « & » : MMdedit est une application graphique,
+          # et PowerShell ne renseigne pas $LASTEXITCODE pour celles-là — le
+          # contrôle échouait alors que le programme avait bien fait son travail.
+          # Le chemin est cité : Start-Process n'entoure pas les arguments de
+          # guillemets, et un chemin contenant une espace arrivait coupé en deux
+          # — ce qui ressemblait à s'y méprendre à un défaut d'encodage.
+          $p = Start-Process -FilePath ".\dist\MMdedit\MMdedit.exe" `
+            -ArgumentList "--smoke", ('"' + $nom + '"') -Wait -PassThru -NoNewWindow
+          if ($p.ExitCode -ne 0) { throw "controle en echec : code $($p.ExitCode)" }
+
+      - name: Dépôt de l'installeur Windows
+        if: runner.os == 'Windows'
+        uses: actions/upload-artifact@v4
+        with:
+          name: mmdedit-windows-setup
+          path: dist/*-setup.exe
+          if-no-files-found: error
+
+      # ---- Linux : AppImage, seul format qui ne dépende pas de la distribution
+      - name: Paquet Linux
+        if: runner.os == 'Linux'
+        shell: bash
+        run: |
+          set -euo pipefail
+          version=$(sed -n 's/^project(mmdedit VERSION \([0-9.]*\).*/\1/p' CMakeLists.txt)
+          cmake --install _build --prefix AppDir/usr
+          install -Dm644 packaging/mmdedit.desktop AppDir/usr/share/applications/mmdedit.desktop
+          # linuxdeploy veut une icône PNG : elle est versionnée à côté du .ico,
+          # extraite une fois pour toutes de celui-ci. ImageMagick n'est plus
+          # installé sur les runners ubuntu-24.04, et une dépendance de plus à la
+          # fabrication pour convertir une image ne se justifie pas.
+          install -Dm644 assets/mmdedit.png \
+            AppDir/usr/share/icons/hicolor/256x256/apps/mmdedit.png
+          base=https://github.com/linuxdeploy
+          curl -sSL -o linuxdeploy.AppImage \
+            "$base/linuxdeploy/releases/download/continuous/linuxdeploy-x86_64.AppImage"
+          curl -sSL -o linuxdeploy-plugin-qt.AppImage \
+            "$base/linuxdeploy-plugin-qt/releases/download/continuous/linuxdeploy-plugin-qt-x86_64.AppImage"
+          chmod +x linuxdeploy.AppImage linuxdeploy-plugin-qt.AppImage
+          # Les runners n'ont pas FUSE : les AppImages doivent s'extraire pour tourner.
+          export APPIMAGE_EXTRACT_AND_RUN=1
+          export QML_SOURCES_PATHS=core/qml
+          export OUTPUT="MMdedit-$version-x86_64.AppImage"
+          ./linuxdeploy.AppImage --appdir AppDir --plugin qt --output appimage
+          test -f "$OUTPUT"
+          mkdir -p dist && mv "$OUTPUT" dist/
+      - name: Contrôle du paquet Linux
+        if: runner.os == 'Linux'
+        shell: bash
+        run: |
+          set -euo pipefail
+          export APPIMAGE_EXTRACT_AND_RUN=1
+          printf '# Été\n\nCoût : 12,50 €.\n' > "Réunion été.md"
+          QT_QPA_PLATFORM=offscreen ./dist/MMdedit-*-x86_64.AppImage --smoke "Réunion été.md"
+      - name: Dépôt de l'AppImage
+        if: runner.os == 'Linux'
+        uses: actions/upload-artifact@v4
+        with:
+          name: mmdedit-linux-appimage
+          path: dist/*.AppImage
+          if-no-files-found: error
+
+      # ---- macOS : bundle déployé et image disque (non notarisée) ----------
+      - name: Paquet macOS
+        if: runner.os == 'macOS'
+        shell: bash
+        run: |
+          set -euo pipefail
+          version=$(sed -n 's/^project(mmdedit VERSION \([0-9.]*\).*/\1/p' CMakeLists.txt)
+          mkdir -p dist
+          cp -R _build/mmdedit.app dist/MMdedit.app
+          "$QT_ROOT_DIR/bin/macdeployqt" dist/MMdedit.app -qmldir=core/qml
+          # Signature ad hoc : sans elle, macOS refuse un bundle dont les
+          # bibliothèques viennent d'être réécrites par macdeployqt. Elle ne
+          # remplace pas la notarisation, qui attend un compte développeur payant.
+          codesign --force --deep --sign - dist/MMdedit.app
+          hdiutil create -volname "MMdedit $version" -srcfolder dist/MMdedit.app \
+            -ov -format UDZO "dist/MMdedit-$version.dmg"
+          test -f "dist/MMdedit-$version.dmg"
+      - name: Contrôle du paquet macOS
+        if: runner.os == 'macOS'
+        shell: bash
+        run: |
+          printf '# Été\n\nCoût : 12,50 €.\n' > "Réunion été.md"
+          QT_QPA_PLATFORM=offscreen ./dist/MMdedit.app/Contents/MacOS/mmdedit --smoke "Réunion été.md"
+      - name: Dépôt de l'image disque macOS
+        if: runner.os == 'macOS'
+        uses: actions/upload-artifact@v4
+        with:
+          name: mmdedit-macos-dmg
+          path: dist/*.dmg
+          if-no-files-found: error
+
+  android:
+    name: android-${{ matrix.abi }}
+    runs-on: ubuntu-24.04
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # arm64 est le livrable ; x86_64 n'existe que pour l'émulateur, qui ne
+          # sait pas exécuter un APK arm64 à une vitesse utilisable.
+          - abi: arm64_v8a
+            cible: aarch64-linux-android
+            variable: CARGO_TARGET_AARCH64_LINUX_ANDROID_LINKER
+            emulateur: false
+          - abi: x86_64
+            cible: x86_64-linux-android
+            variable: CARGO_TARGET_X86_64_LINUX_ANDROID_LINKER
+            emulateur: true
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.cible }}
+      - name: Qt hôte (bureau Linux)
+        uses: jurplel/install-qt-action@v4
+        with:
+          version: ${{ env.QT_VERSION }}
+          cache: true
+      - name: Mémorisation du Qt hôte
+        shell: bash
+        run: echo "QT_HOST_DIR=$QT_ROOT_DIR" >> "$GITHUB_ENV"
+      - name: Qt Android
+        uses: jurplel/install-qt-action@v4
+        with:
+          version: ${{ env.QT_VERSION }}
+          host: all_os
+          target: android
+          arch: android_${{ matrix.abi }}
+          cache: true
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+      - name: Configuration
+        shell: bash
+        run: |
+          NDK="$ANDROID_SDK_ROOT/ndk/26.3.11579264"
+          [ -d "$NDK" ] || { yes || true; } | "$ANDROID_SDK_ROOT/cmdline-tools/latest/bin/sdkmanager" "ndk;26.3.11579264" > /dev/null
+          test -d "$NDK"
+          HOST="$QT_HOST_DIR"
+          maillon="$NDK/toolchains/llvm/prebuilt/linux-x86_64/bin/${{ matrix.cible }}26-clang"
+          test -x "$maillon"
+          echo "${{ matrix.variable }}=$maillon" >> "$GITHUB_ENV"
+          export ${{ matrix.variable }}="$maillon"
+          "$QT_ROOT_DIR/bin/qt-cmake" -S . -B _build -G Ninja -DCMAKE_BUILD_TYPE=Release \
+            -DANDROID_SDK_ROOT="$ANDROID_SDK_ROOT" -DANDROID_NDK_ROOT="$NDK" \
+            -DQT_HOST_PATH="$HOST"
+      - name: Construction APK
+        run: cmake --build _build --target apk
+      - name: Lancement sur émulateur
+        if: matrix.emulateur
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 34
+          arch: x86_64
+          target: default
+          emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim
+          disable-animations: true
+          # Une seule ligne : l'action exécute chaque ligne dans un shell distinct.
+          script: bash packaging/essai-android.sh
+      - name: Journal de l'émulateur
+        if: matrix.emulateur && failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: mmdedit-android-logcat
+          path: logcat.txt
+          if-no-files-found: ignore
+      - name: Dépôt de l'APK
+        if: matrix.abi == 'arm64_v8a'
+        uses: actions/upload-artifact@v4
+        with:
+          name: mmdedit-android-arm64
+          path: _build/android-build/build/outputs/apk/**/*.apk
+          if-no-files-found: error
