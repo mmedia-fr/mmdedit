@@ -125,6 +125,13 @@ int main(int argc, char* argv[])
         return;
       }
       QObject* racine = engine.rootObjects().first();
+      // Un fichier qu'on vient d'ouvrir n'est pas modifié. La coloration Markdown,
+      // appliquée par Qt après le chargement, le faisait croire : astérisque au
+      // titre et « enregistrer ? » à la fermeture d'un document seulement lu
+      // (0.4.2 et avant). Les événements en attente passent d'abord, puisque
+      // c'est parmi eux que la coloration arrive.
+      QCoreApplication::processEvents();
+      const bool modifieALOuverture = racine->property("modifie").toBool();
       const QString noyau = racine->property("noyau").toString();
       // Le noyau doit aussi répondre sur ce qu'il porte désormais : le document.
       QVariant comptes;
@@ -150,6 +157,11 @@ int main(int argc, char* argv[])
         std::fprintf(stderr, "smoke: le fichier donne en argument n'est pas arrive dans l'editeur\n");
         std::fprintf(stderr, "smoke: argument recu = %s\n", fichier.toUtf8().constData());
         QCoreApplication::exit(4);
+        return;
+      }
+      if (!fichierInitial.isEmpty() && modifieALOuverture) {
+        std::fprintf(stderr, "smoke: le document est marque modifie des l'ouverture\n");
+        QCoreApplication::exit(9);
         return;
       }
       // Édition assistée : le contrôle est écrit en QML, là où il peut agir sur
