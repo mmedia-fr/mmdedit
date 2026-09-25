@@ -83,6 +83,11 @@ ApplicationWindow {
     // Vrai pendant qu'on remplace le texte de l'éditeur par programme : sans ce
     // drapeau, le chargement d'un fichier marquerait aussitôt le document modifié.
     property bool chargementEnCours: false
+    // Le texte tel qu'il a été lu ou écrit pour la dernière fois. Le TextArea émet
+    // textChanged sans que le texte change — quand la coloration Markdown
+    // s'applique, après le chargement et donc après le drapeau ci-dessus : seul un
+    // écart réel à cette référence rend le document modifié.
+    property string texteReference: ""
 
     // Objet témoin de la liaison Rust : le test de fumée lit cette propriété.
     Socle { id: socle }
@@ -386,7 +391,10 @@ ApplicationWindow {
                 font.family: fenetre.jeu && fenetre.jeu.mono ? fenetre.jeu.mono : "monospace"
                 font.pointSize: fenetre.jeu && fenetre.jeu.tailleMono ? fenetre.jeu.tailleMono : 11
                 onTextChanged: {
-                    if (!fenetre.chargementEnCours)
+                    // Une fois le document modifié, plus rien à comparer : la
+                    // lecture du texte entier n'a lieu qu'avant la première frappe.
+                    if (!fenetre.chargementEnCours && !fenetre.modifie
+                            && editeur.text !== fenetre.texteReference)
                         fenetre.modifie = true
                     minuteurApercu.restart()
                 }
@@ -524,6 +532,7 @@ ApplicationWindow {
                       qsTr("CSV (*.csv)"), qsTr("Tous les fichiers (*)")]
         onAccepted: {
             if (doc.enregistrer(selectedFile, editeur.text)) {
+                fenetre.texteReference = editeur.text
                 fenetre.modifie = false
                 fenetre.flash(qsTr("Enregistré."))
                 fenetre.poursuivre()
@@ -717,6 +726,9 @@ ApplicationWindow {
         var contenu = doc.ouvrir(url)
         if (doc.erreur.length === 0) {
             editeur.text = contenu
+            // Relu sur l'éditeur plutôt que repris du fichier : c'est à ce que
+            // porte le TextArea que les frappes seront comparées.
+            texteReference = editeur.text
             modifie = false
             appliquerFormat()
         }
@@ -728,6 +740,7 @@ ApplicationWindow {
         chargementEnCours = true
         doc.nouveau()
         editeur.text = ""
+        texteReference = ""
         modifie = false
         appliquerFormat()
         chargementEnCours = false
@@ -740,6 +753,7 @@ ApplicationWindow {
             return
         }
         if (doc.enregistrer(doc.chemin, editeur.text)) {
+            texteReference = editeur.text
             modifie = false
             flash(qsTr("Enregistré."))
             poursuivre()
@@ -848,7 +862,18 @@ ApplicationWindow {
         choisirApparence("systeme")
         verifier("apparence systeme", palette.window.toString(), fondSysteme.toString())
 
+        // Détection des modifications : une frappe réelle marque toujours le
+        // document — la comparaison au texte de référence ne l'a pas rendue muette.
+        editeur.text = "texte lu"
+        texteReference = editeur.text
+        chargementEnCours = false
+        modifie = false
+        editeur.insert(0, "x")
+        verifier("frappe marque modifie", modifie, true)
+        chargementEnCours = true
+
         editeur.text = ""
+        texteReference = ""
         chargementEnCours = false
         modifie = false
         return ecarts.length === 0 ? "ok" : ecarts.join(" ; ")
