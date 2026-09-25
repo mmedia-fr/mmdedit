@@ -107,6 +107,11 @@ L'installeur pose :
 - MMdedit dans la liste **« Ouvrir avec »** des `.md`, `.markdown` et `.txt` ;
 - une entrée de désinstallation dans *Programmes et fonctionnalités*.
 
+Le runtime Visual C++ est déposé à côté de l'exécutable : rien d'autre à
+installer. Jusqu'à la 0.4.2, il ne l'était pas, et un poste dépourvu du
+redistribuable Microsoft ne démarrait pas le programme (`vcruntime140.dll` ou
+`msvcp140.dll` introuvable).
+
 L'installeur **ne s'impose pas comme application par défaut** : il s'ajoute à
 `OpenWithProgids` sans toucher au `UserChoice` de l'utilisateur.
 
