@@ -133,6 +133,10 @@ chmod +x MMdedit-<version>-x86_64.AppImage
 ./MMdedit-<version>-x86_64.AppImage [fichier]
 ```
 
+L'AppImage exige une glibc 2.35 ou plus récente : Debian 12, Ubuntu 22.04 et
+leurs successeurs. Celle de la 0.4.1, fabriquée sur un système plus récent,
+exigeait la glibc 2.39 et ne démarrait pas sur Debian 12.
+
 ## Installation sous Android
 
 L'APK s'installe après avoir autorisé les sources inconnues pour l'application

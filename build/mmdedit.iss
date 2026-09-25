@@ -1,7 +1,7 @@
 ﻿; Installeur Windows de MMdedit — socle Rust / Qt 6 (Inno Setup 6).
 ;
 ; Compilation :
-;   ISCC.exe /DAppVersion=0.4.1 build\mmdedit.iss
+;   ISCC.exe /DAppVersion=0.4.2 build\mmdedit.iss
 ;
 ; Prérequis : dist\MMdedit\ doit contenir MMdedit.exe et les bibliothèques Qt
 ; déposées par windeployqt (cf. le workflow « socle », étape « Paquet Windows »).
@@ -11,7 +11,7 @@
 ; reçoit celle-ci comme une mise à jour, et non comme un second programme.
 
 #ifndef AppVersion
-  #define AppVersion "0.4.1"
+  #define AppVersion "0.4.2"
 #endif
 #define AppName        "MMdedit"
 #define AppPublisher   "M-Media"

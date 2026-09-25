@@ -24,7 +24,11 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - { nom: linux,   os: ubuntu-24.04 }
+          # L'AppImage embarque tout sauf la glibc du système : elle ne tourne
+          # que sur une glibc au moins aussi récente que celle de sa fabrication.
+          # Construite sur ubuntu-24.04 (glibc 2.39), la 0.4.1 refusait Debian 12
+          # et Ubuntu 22.04 ; ubuntu-22.04 (glibc 2.35) les couvre.
+          - { nom: linux,   os: ubuntu-22.04 }
           - { nom: windows, os: windows-2022 }
           - { nom: macos,   os: macos-14 }
     steps:
@@ -33,6 +37,9 @@ jobs:
       - uses: Swatinem/rust-cache@v2
         with:
           workspaces: core -> ../_build/cargo
+          # La clé par défaut ne distingue pas les versions d'Ubuntu : des objets
+          # compilés sous glibc 2.39 (__isoc23_*) ne se lient pas sous 2.35.
+          key: ${{ matrix.os }}
       - uses: jurplel/install-qt-action@v4
         with:
           version: ${{ env.QT_VERSION }}
@@ -122,6 +129,7 @@ jobs:
           if-no-files-found: error
 
       # ---- Linux : AppImage, seul format qui ne dépende pas de la distribution
+      # (pourvu que sa glibc soit au moins celle du runner, cf. la matrice)
       - name: Paquet Linux
         if: runner.os == 'Linux'
         shell: bash
@@ -132,7 +140,7 @@ jobs:
           install -Dm644 packaging/mmdedit.desktop AppDir/usr/share/applications/mmdedit.desktop
           # linuxdeploy veut une icône PNG : elle est versionnée à côté du .ico,
           # extraite une fois pour toutes de celui-ci. ImageMagick n'est plus
-          # installé sur les runners ubuntu-24.04, et une dépendance de plus à la
+          # installé sur les runners ubuntu récents, et une dépendance de plus à la
           # fabrication pour convertir une image ne se justifie pas.
           install -Dm644 assets/mmdedit.png \
             AppDir/usr/share/icons/hicolor/256x256/apps/mmdedit.png
@@ -145,6 +153,10 @@ jobs:
           # Les runners n'ont pas FUSE : les AppImages doivent s'extraire pour tourner.
           export APPIMAGE_EXTRACT_AND_RUN=1
           export QML_SOURCES_PATHS=core/qml
+          # linuxdeploy ne dépose que la plateforme xcb : sans offscreen, le
+          # paquet ne se contrôle pas sans écran — ni ici, ni sur un poste à
+          # distance (même raison que qoffscreen.dll sous Windows).
+          export EXTRA_PLATFORM_PLUGINS=libqoffscreen.so
           export OUTPUT="MMdedit-$version-x86_64.AppImage"
           ./linuxdeploy.AppImage --appdir AppDir --plugin qt --output appimage
           test -f "$OUTPUT"
@@ -156,7 +168,11 @@ jobs:
           set -euo pipefail
           export APPIMAGE_EXTRACT_AND_RUN=1
           printf '# Été\n\nCoût : 12,50 €.\n' > "Réunion été.md"
-          QT_QPA_PLATFORM=offscreen ./dist/MMdedit-*-x86_64.AppImage --smoke "Réunion été.md"
+          # Sans les chemins du Qt de construction, que pose install-qt-action :
+          # c'est le paquet seul qui doit tenir debout. Avec eux, le contrôle
+          # passait alors que l'AppImage n'embarquait pas la plateforme offscreen.
+          env -u QT_PLUGIN_PATH -u QML2_IMPORT_PATH -u LD_LIBRARY_PATH \
+            QT_QPA_PLATFORM=offscreen ./dist/MMdedit-*-x86_64.AppImage --smoke "Réunion été.md"
       - name: Dépôt de l'AppImage
         if: runner.os == 'Linux'
         uses: actions/upload-artifact@v4
