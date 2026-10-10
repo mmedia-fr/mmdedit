@@ -83,6 +83,14 @@ if(NOT ANDROID)
 endif()
 target_link_libraries(mmdedit PRIVATE mmdedit_qml_module Qt::Quick Qt::QuickControls2
                                       Qt::QuickDialogs2 Qt::LabsSettings)
+
+# Le vérificateur de certificats de la plateforme (avis de nouvelle version)
+# s'appuie sur le Security Framework sous macOS : sans ces deux bibliothèques,
+# l'édition de liens s'arrête sur « _AuthorizationCreate, symbol(s) not found ».
+# Même correctif que MMail.
+if(APPLE)
+  target_link_libraries(mmdedit PRIVATE "-framework Security" "-framework CoreFoundation")
+endif()
 target_compile_definitions(mmdedit PRIVATE MMDEDIT_VERSION="${PROJECT_VERSION}")
 
 set_target_properties(mmdedit PROPERTIES
