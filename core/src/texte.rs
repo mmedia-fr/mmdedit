@@ -46,7 +46,33 @@ const EXT_MARKDOWN: &[&str] = &["md", "markdown"];
 /// Formats balisés : coloration XML, aperçu Markdown sans objet.
 const EXT_XML: &[&str] = &[
     "xml", "xsd", "xsl", "xslt", "svg", "rss", "atom", "html", "htm", "xhtml", "plist", "config",
-    "csproj", "props",
+    "csproj", "props", "targets", "vcxproj", "resx", "nuspec", "ui", "qrc", "xaml",
+];
+
+/// Données et configuration : clés, chaînes, nombres, commentaires, sections.
+const EXT_DONNEES: &[&str] = &[
+    "json", "jsonc", "yaml", "yml", "toml", "ini", "conf", "cfg", "env", "properties", "reg",
+    "desktop", "service",
+];
+
+/// Scripts et code : commentaires, chaînes, nombres, mots-clés, variables.
+const EXT_CODE: &[&str] = &[
+    "sh", "bash", "zsh", "ps1", "psm1", "psd1", "bat", "cmd", "py", "rs", "js", "mjs", "cjs",
+    "ts", "c", "h", "cpp", "hpp", "cc", "cs", "java", "go", "php", "rb", "lua", "sql", "vbs",
+];
+
+/// Journaux : niveaux de gravité et horodatages.
+const EXT_JOURNAL: &[&str] = &["log", "out", "err", "trace"];
+
+/// Fichiers reconnus à leur nom, faute d'extension — « .env » n'en a pas, au
+/// sens de la fonction `extension()` ci-dessous, et un Makefile n'en porte pas.
+const NOMS_CONNUS: &[(&str, Format)] = &[
+    ("makefile", Format::Code),
+    ("dockerfile", Format::Code),
+    ("containerfile", Format::Code),
+    (".env", Format::Donnees),
+    (".editorconfig", Format::Donnees),
+    (".gitconfig", Format::Donnees),
 ];
 
 /// Format d'un document, déduit de l'extension du fichier.
@@ -54,6 +80,9 @@ const EXT_XML: &[&str] = &[
 pub enum Format {
     Markdown,
     Xml,
+    Donnees,
+    Code,
+    Journal,
     Texte,
 }
 
@@ -63,6 +92,9 @@ impl Format {
         match self {
             Format::Markdown => "markdown",
             Format::Xml => "xml",
+            Format::Donnees => "donnees",
+            Format::Code => "code",
+            Format::Journal => "journal",
             Format::Texte => "texte",
         }
     }
@@ -72,21 +104,37 @@ impl Format {
         match self {
             Format::Markdown => "Markdown",
             Format::Xml => "XML",
+            Format::Donnees => "Configuration",
+            Format::Code => "Code",
+            Format::Journal => "Journal",
             Format::Texte => "Texte",
         }
     }
 }
 
 /// Format déduit d'un chemin. Un document sans chemin est du Markdown.
+///
+/// Le nom complet est regardé avant l'extension : « .env » et « Makefile » n'en
+/// ont pas, et tomberaient sinon dans le format texte.
 pub fn format_du_chemin(chemin: &str) -> Format {
     if chemin.is_empty() {
         return Format::Markdown;
+    }
+    let nom = nom_fichier(chemin).to_ascii_lowercase();
+    if let Some((_, format)) = NOMS_CONNUS.iter().find(|(connu, _)| *connu == nom) {
+        return *format;
     }
     let ext = extension(chemin);
     if EXT_MARKDOWN.contains(&ext.as_str()) {
         Format::Markdown
     } else if EXT_XML.contains(&ext.as_str()) {
         Format::Xml
+    } else if EXT_DONNEES.contains(&ext.as_str()) {
+        Format::Donnees
+    } else if EXT_CODE.contains(&ext.as_str()) {
+        Format::Code
+    } else if EXT_JOURNAL.contains(&ext.as_str()) {
+        Format::Journal
     } else {
         Format::Texte
     }
@@ -246,8 +294,46 @@ mod tests {
         assert_eq!(format_du_chemin("/tmp/notes.md"), Format::Markdown);
         assert_eq!(format_du_chemin("/tmp/NOTES.MARKDOWN"), Format::Markdown);
         assert_eq!(format_du_chemin(r"C:\x\page.HTML"), Format::Xml);
+        assert_eq!(format_du_chemin("/tmp/vue.ui"), Format::Xml);
         assert_eq!(format_du_chemin("/tmp/releve.csv"), Format::Texte);
         assert_eq!(format_du_chemin("/tmp/.gitignore"), Format::Texte);
+    }
+
+    #[test]
+    fn formats_configuration_code_journal() {
+        assert_eq!(format_du_chemin("/etc/app/reglages.JSON"), Format::Donnees);
+        assert_eq!(format_du_chemin("/etc/app.conf"), Format::Donnees);
+        assert_eq!(format_du_chemin("/tmp/compose.yml"), Format::Donnees);
+        assert_eq!(format_du_chemin("/tmp/deploy.sh"), Format::Code);
+        assert_eq!(format_du_chemin(r"C:\scripts\Inventaire.PS1"), Format::Code);
+        assert_eq!(format_du_chemin("/tmp/requete.sql"), Format::Code);
+        assert_eq!(format_du_chemin("/var/log/syslog.log"), Format::Journal);
+        // Reconnus à leur nom : ils n'ont pas d'extension.
+        assert_eq!(format_du_chemin("/src/Makefile"), Format::Code);
+        assert_eq!(format_du_chemin("/src/Dockerfile"), Format::Code);
+        assert_eq!(format_du_chemin("/home/dev/.env"), Format::Donnees);
+        // Un nom connu l'emporte sur l'absence d'extension, pas sur une vraie.
+        assert_eq!(format_du_chemin("/src/makefile.md"), Format::Markdown);
+    }
+
+    #[test]
+    fn cles_et_libelles_distincts() {
+        let formats = [
+            Format::Markdown,
+            Format::Xml,
+            Format::Donnees,
+            Format::Code,
+            Format::Journal,
+            Format::Texte,
+        ];
+        // Les clés partent à QML, qui les compare telles quelles pour choisir la
+        // coloration : un doublon y attacherait silencieusement la mauvaise.
+        for (i, a) in formats.iter().enumerate() {
+            for b in &formats[i + 1..] {
+                assert_ne!(a.cle(), b.cle());
+                assert_ne!(a.libelle(), b.libelle());
+            }
+        }
     }
 
     #[test]

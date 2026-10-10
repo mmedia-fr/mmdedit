@@ -42,8 +42,16 @@ affiché en barre d'état :
 | Format | Extensions | Comportement |
 |---|---|---|
 | **Markdown** | `.md`, `.markdown` | coloration Markdown, aperçu rendu affiché |
-| **XML / HTML** | `.xml`, `.xsd`, `.xsl`, `.svg`, `.html`, `.plist`, `.csproj`… | coloration XML (balises, attributs, valeurs, commentaires multi-lignes, CDATA, entités), aperçu masqué |
+| **XML / HTML** | `.xml`, `.xsd`, `.xsl`, `.svg`, `.html`, `.plist`, `.csproj`, `.ui`, `.qrc`, `.xaml`… | coloration XML (balises, attributs, valeurs, commentaires multi-lignes, CDATA, entités), aperçu masqué |
+| **Configuration** | `.json`, `.yaml`, `.yml`, `.toml`, `.ini`, `.conf`, `.cfg`, `.env`, `.reg`, `.desktop`… | clés, chaînes, nombres, littéraux (`true`, `null`, `on`…), sections `[…]` et commentaires |
+| **Code** | `.sh`, `.ps1`, `.bat`, `.cmd`, `.py`, `.rs`, `.js`, `.ts`, `.c`, `.h`, `.cpp`, `.cs`, `.sql`, `.php`, `.lua`… | mots-clés, chaînes, nombres, variables (`$nom`, `%nom%`) et commentaires, y compris `/* … */` sur plusieurs lignes |
+| **Journal** | `.log`, `.out`, `.err`, `.trace` | niveaux de gravité en couleur — erreur, avertissement, information, mise au point — et horodatages en retrait |
 | **Texte** | `.txt`, `.csv`… | sans coloration, aperçu masqué |
+
+`Makefile`, `Dockerfile` et `.env` sont reconnus à leur nom, n'ayant pas
+d'extension. La coloration du code repose sur une liste de mots-clés commune
+aux langages, prise sans égard à la casse : elle fait ressortir la structure
+d'un fichier qu'on relit, elle n'analyse pas le langage.
 
 L'aperçu reste rouvrable à la main par le menu *Affichage*.
 

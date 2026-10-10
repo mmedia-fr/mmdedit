@@ -60,6 +60,13 @@ public:
       m_colorateur = new ColorateurMarkdown(doc);
     else if (format == QStringLiteral("xml"))
       m_colorateur = new ColorateurXml(doc);
+    else if (format == QStringLiteral("donnees"))
+      m_colorateur = new ColorateurDonnees(doc);
+    else if (format == QStringLiteral("code"))
+      m_colorateur = new ColorateurCode(doc);
+    else if (format == QStringLiteral("journal"))
+      m_colorateur = new ColorateurJournal(doc);
+    // Tout autre format — « texte » — reste sans coloration.
   }
 
   /// Écrit le texte en PDF, rendu comme dans l'aperçu. Rend faux en cas d'échec.
