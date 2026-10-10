@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 //! Lecture HTTPS minimale : la seule sortie réseau de MMdedit, pour l'avis de
-//! nouvelle version (cf. `version`).
+//! nouvelle version et la mise à jour assistée (cf. `mise_a_jour`).
 //!
-//! Repris du client de MMail (`core/src/http.rs`), réduit à une lecture :
-//! même pile TLS en pur Rust, mêmes autorités de certification, mêmes bornes.
+//! Repris du client de MMail (`core/src/http.rs`), réduit au GET : même pile
+//! TLS en pur Rust, mêmes autorités de certification, mêmes bornes.
 //! Une bibliothèque HTTP apporterait sa propre pile TLS, qu'il faudrait régler
 //! à nouveau pour Android ; Qt Network demanderait d'y embarquer OpenSSL.
 //!
@@ -128,7 +128,12 @@ pub fn lire(url: &str, accepte: &str) -> Resultat<Reponse> {
     Err(Erreur::Protocole("trop de redirections".into()))
 }
 
-fn une_requete(url: &str, accepte: &str) -> Resultat<Reponse> {
+/// Connexion TLS ouverte sur le serveur d'une adresse.
+type Flux = rustls::StreamOwned<rustls::ClientConnection, TcpStream>;
+
+/// Se connecte au serveur de `url` et lui envoie la demande ; la réponse reste
+/// à lire sur le flux rendu.
+fn demander(url: &str, accepte: &str) -> Resultat<Flux> {
     let cible = analyser_url(url)?;
     let nom = rustls::pki_types::ServerName::try_from(cible.hote.clone())
         .map_err(|_| Erreur::Reseau(format!("nom de serveur invalide : {}", cible.hote)))?;
@@ -153,7 +158,11 @@ fn une_requete(url: &str, accepte: &str) -> Resultat<Reponse> {
     );
     flux.write_all(tete.as_bytes())?;
     flux.flush()?;
+    Ok(flux)
+}
 
+fn une_requete(url: &str, accepte: &str) -> Resultat<Reponse> {
+    let mut flux = demander(url, accepte)?;
     let mut brut = Vec::new();
     let mut tampon = [0u8; 8192];
     let echeance = Instant::now() + DUREE_MAX;
@@ -185,6 +194,85 @@ fn une_requete(url: &str, accepte: &str) -> Resultat<Reponse> {
         }
     }
     analyser_reponse(&brut)
+}
+
+/// Taille de la tête d'une réponse au-delà de laquelle on renonce.
+const TETE_MAX: usize = 64 * 1024;
+
+/// Télécharge un fichier (GET, redirections vers HTTPS suivies) en le passant
+/// morceau par morceau à `ecrire`, sans le garder en mémoire : une mise à jour
+/// de MMdedit pèse des dizaines de mégaoctets. La longueur doit être annoncée —
+/// c'est elle qui dit le fichier complet, et qui mesure la progression,
+/// `progression(reçus, total)`. Chaque lecture est bornée par `DELAI`, non le
+/// téléchargement entier : une connexion lente mais vivante va au bout. Rend
+/// la taille reçue. Repris de MMail (0.5.8).
+pub fn telecharger(
+    url: &str,
+    taille_max: u64,
+    ecrire: &mut dyn FnMut(&[u8]) -> Resultat<()>,
+    progression: &mut dyn FnMut(u64, u64),
+) -> Resultat<u64> {
+    let mut url = url.trim().to_string();
+    for _ in 0..=REDIRECTIONS_MAX {
+        let mut flux = demander(&url, "application/octet-stream")?;
+        let mut brut = Vec::new();
+        let mut tampon = [0u8; 64 * 1024];
+        while !brut.windows(4).any(|w| w == b"\r\n\r\n") {
+            if brut.len() > TETE_MAX {
+                return Err(Erreur::Protocole("en-têtes HTTP démesurés".into()));
+            }
+            match flux.read(&mut tampon) {
+                Ok(0) => return Err(Erreur::Reseau("réponse HTTP incomplète".into())),
+                Ok(n) => brut.extend_from_slice(&tampon[..n]),
+                Err(e) if e.kind() == ErrorKind::UnexpectedEof => {
+                    return Err(Erreur::Reseau("réponse HTTP incomplète".into()))
+                }
+                Err(e) => return Err(e.into()),
+            }
+        }
+        let (statut, entetes, debut) = analyser_tete(&brut)?;
+        let entete = |nom: &str| entetes.iter().find(|(n, _)| n == nom).map(|(_, v)| v.as_str());
+        if matches!(statut, 301 | 302 | 303 | 307 | 308) {
+            let location = entete("location").ok_or_else(|| Erreur::Protocole("redirection sans adresse".into()))?;
+            url = resoudre(&url, location)?;
+            continue;
+        }
+        if statut != 200 {
+            return Err(Erreur::Refuse(format!("le serveur a répondu {statut}")));
+        }
+        if entete("transfer-encoding").is_some_and(|v| !v.eq_ignore_ascii_case("identity")) {
+            return Err(Erreur::Protocole("longueur du fichier non annoncée".into()));
+        }
+        let total: u64 = entete("content-length")
+            .and_then(|v| v.parse().ok())
+            .ok_or_else(|| Erreur::Protocole("longueur du fichier non annoncée".into()))?;
+        if total > taille_max {
+            return Err(Erreur::Refuse("fichier trop volumineux".into()));
+        }
+        let mut recus = 0u64;
+        let mut morceau = &brut[debut..];
+        loop {
+            let utile = morceau.len().min((total - recus) as usize);
+            if utile > 0 {
+                ecrire(&morceau[..utile])?;
+                recus += utile as u64;
+                progression(recus, total);
+            }
+            if recus == total {
+                return Ok(total);
+            }
+            let n = match flux.read(&mut tampon) {
+                Ok(n) => n,
+                Err(e) if e.kind() == ErrorKind::UnexpectedEof => 0,
+                Err(e) => return Err(e.into()),
+            };
+            if n == 0 {
+                return Err(Erreur::Reseau(format!("téléchargement interrompu : {recus} octets sur {total}")));
+            }
+            morceau = &tampon[..n];
+        }
+    }
+    Err(Erreur::Protocole("trop de redirections".into()))
 }
 
 /// Configuration TLS du bureau : le vérificateur de la plateforme, qui lit le
@@ -240,8 +328,9 @@ fn reponse_complete(brut: &[u8]) -> bool {
     }
 }
 
-/// Découpe une réponse HTTP/1.x complète : statut, redirection, corps.
-pub fn analyser_reponse(brut: &[u8]) -> Resultat<Reponse> {
+/// Statut et en-têtes (noms en minuscules) d'une réponse, dont `brut` contient
+/// au moins la tête ; et la position où commence le corps.
+fn analyser_tete(brut: &[u8]) -> Resultat<(u16, Vec<(String, String)>, usize)> {
     let fin = brut
         .windows(4)
         .position(|w| w == b"\r\n\r\n")
@@ -262,9 +351,15 @@ pub fn analyser_reponse(brut: &[u8]) -> Resultat<Reponse> {
         .filter_map(|l| l.split_once(':'))
         .map(|(n, v)| (n.trim().to_ascii_lowercase(), v.trim().to_string()))
         .collect();
+    Ok((statut, entetes, fin + 4))
+}
+
+/// Découpe une réponse HTTP/1.x complète : statut, redirection, corps.
+pub fn analyser_reponse(brut: &[u8]) -> Resultat<Reponse> {
+    let (statut, entetes, debut) = analyser_tete(brut)?;
     let entete = |nom: &str| entetes.iter().find(|(n, _)| n == nom).map(|(_, v)| v.as_str());
 
-    let reste = &brut[fin + 4..];
+    let reste = &brut[debut..];
     let morcele = entete("transfer-encoding")
         .map(|v| v.to_ascii_lowercase().contains("chunked"))
         .unwrap_or(false);
@@ -390,6 +485,17 @@ mod tests {
         // Sans le bloc final : tronquée.
         assert!(analyser_reponse(b"HTTP/1.1 200 OK\r\nTransfer-Encoding: chunked\r\n\r\n4\r\nbonj\r\n")
             .is_err());
+    }
+
+    #[test]
+    fn tete_d_une_reponse() {
+        let brut = b"HTTP/1.1 302 Found\r\nLocation: https://b.fr/x\r\nContent-Length: 12\r\n\r\ndebut";
+        let (statut, entetes, debut) = analyser_tete(brut).unwrap();
+        assert_eq!(statut, 302);
+        assert!(entetes.contains(&("location".into(), "https://b.fr/x".into())));
+        assert!(entetes.contains(&("content-length".into(), "12".into())));
+        assert_eq!(&brut[debut..], b"debut");
+        assert!(analyser_tete(b"HTTP/1.1 200 OK\r\nContent-Length: 4\r\n").is_err());
     }
 
     #[test]

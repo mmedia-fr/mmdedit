@@ -12,12 +12,16 @@
 #include <QtCore/QVariant>
 #include <QtGui/QGuiApplication>
 #include <QtGui/QIcon>
+#if QT_CONFIG(sessionmanager)
+#  include <QtGui/QSessionManager>
+#endif
 #include <QtQml/QQmlApplicationEngine>
 #include <QtQml/QQmlContext>
 #include <QtQuick/QQuickWindow>
 #include <QtQuickControls2/QQuickStyle>
 #include <QtQml/qqml.h>
 
+#include "installeur.h"
 #include "pont_texte.h"
 #include "presse_papier.h"
 #include <QtGui/QImage>
@@ -102,6 +106,8 @@ int main(int argc, char* argv[])
   // de portée du QML et du noyau Rust. URI distinct de celui du module cxx-qt.
   qmlRegisterType<PontTexte>("fr.mmedia.mmdedit.natif", 1, 0, "PontTexte");
   qmlRegisterType<PressePapier>("fr.mmedia.mmdedit.natif", 1, 0, "PressePapier");
+  // Installation d'une mise à jour à la fermeture (cf. core/src/mise_a_jour.rs).
+  qmlRegisterType<Installeur>("fr.mmedia.mmdedit.natif", 1, 0, "Installeur");
 
   // Fusion plutôt que le style natif : c'est le seul à honorer une palette sur
   // les quatre cibles, et les apparences de MMdedit (classique, moderne) n'ont
@@ -126,10 +132,15 @@ int main(int argc, char* argv[])
   engine.rootContext()->setContextProperty(
     QStringLiteral("avisVersion"),
     reglageMachine("MMDEDIT_AVIS_VERSION", QStringLiteral("AvisVersion")) != QStringLiteral("0"));
-  // Commodité de développement (cf. core/src/version.rs) : la vérification part
-  // aussitôt, pour qu'une capture montre le bandeau.
+  // Commodité de développement (cf. core/src/mise_a_jour.rs) : la vérification
+  // part aussitôt, pour qu'une capture montre le bandeau.
   engine.rootContext()->setContextProperty(QStringLiteral("essaiAvis"),
                                            qEnvironmentVariableIsSet("MMDEDIT_AVIS_ESSAI"));
+  // Scénario d'essai de la mise à jour assistée (« mise-a-jour »,
+  // « mise-a-jour-fermeture ») : MMdedit choisit lui-même, comme le ferait un
+  // clic, pour que l'intégration continue l'éprouve de bout en bout.
+  engine.rootContext()->setContextProperty(QStringLiteral("scenarioEssai"),
+                                           qEnvironmentVariable("MMDEDIT_SCENARIO"));
 
   // Chargement par URL qrc plutôt que loadFromModule(), absent de Qt 6.4 (Debian 12).
   const QUrl url(QStringLiteral("qrc:/qt/qml/fr/mmedia/mmdedit/qml/Main.qml"));
@@ -236,5 +247,15 @@ int main(int argc, char* argv[])
       QCoreApplication::exit(image.save(capture) ? 0 : 6);
     });
   }
-  return app.exec();
+#if QT_CONFIG(sessionmanager)
+  // Arrêt ou déconnexion : pas d'installation lancée maintenant (cf.
+  // cpp/installeur.h).
+  QObject::connect(&app, &QGuiApplication::commitDataRequest, &app,
+                   [](QSessionManager&) { Installeur::sessionFinie(); });
+#endif
+  const int code = app.exec();
+  // Mise à jour retenue pour la fermeture : son installeur part maintenant, et
+  // attend la fin de ce processus pour remplacer les fichiers.
+  Installeur::executer();
+  return code;
 }
