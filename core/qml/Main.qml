@@ -605,8 +605,14 @@ ApplicationWindow {
         id: dlgOuvrir
         title: qsTr("Ouvrir un fichier")
         fileMode: FileDialog.OpenFile
+        // MMdedit ouvre tout fichier texte : ces filtres ne restreignent rien,
+        // ils évitent seulement de chercher à la main dans un dossier chargé.
         nameFilters: [qsTr("Markdown (*.md *.markdown)"), qsTr("Texte (*.txt)"),
-                      qsTr("CSV (*.csv)"), qsTr("Tous les fichiers (*)")]
+                      qsTr("CSV (*.csv)"),
+                      qsTr("Configuration (*.json *.yaml *.yml *.toml *.ini *.conf *.cfg *.env)"),
+                      qsTr("Code et scripts (*.sh *.ps1 *.bat *.cmd *.py *.rs *.js *.ts *.c *.h *.cpp *.sql)"),
+                      qsTr("Journaux (*.log *.out *.err *.trace)"),
+                      qsTr("Tous les fichiers (*)")]
         onAccepted: fenetre.charger(selectedFile)
     }
 
@@ -994,6 +1000,19 @@ ApplicationWindow {
         reglerZoom(1.0)
         verifier("zoom normal", editeur.font.pointSize, editeurA100)
         verifier("zoom normal apercu", apercu.font.pointSize, apercuA100)
+
+        // Colorations : chaque clé rendue par le noyau doit être acceptée par la
+        // fabrique du pont, et le document rester intact — une clé inconnue y
+        // passerait sans bruit, en laissant le fichier sans coloration.
+        editeur.text = "# titre\nclef = \"valeur\" # note\nif [ -n \"$x\" ]; then echo 1; fi\n"
+                       + "2026-10-10 09:41:06 ERROR panne\n<balise attribut=\"v\"/>"
+        var temoin = editeur.text
+        var cles = ["markdown", "xml", "donnees", "code", "journal", "texte"]
+        for (var i = 0; i < cles.length; ++i) {
+            pont.colorer(editeur.textDocument, cles[i])
+            verifier("coloration " + cles[i], editeur.text, temoin)
+        }
+        pont.colorer(editeur.textDocument, doc.format)
 
         // Détection des modifications : une frappe réelle marque toujours le
         // document — la comparaison au texte de référence ne l'a pas rendue muette.
