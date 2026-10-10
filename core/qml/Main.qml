@@ -115,30 +115,57 @@ ApplicationWindow {
     PressePapier { id: pressePapier }
     ReglePressePapier { id: reglePresse }
 
-    // Avis de nouvelle version, comme dans MMail : la dernière publication du
-    // dépôt, demandée à l'API de GitHub un quart de minute après le démarrage,
-    // puis une fois par jour. Coupé pour la machine par « AvisVersion » à 0, et
-    // pendant le contrôle de fabrication, qui ne sort pas sur le réseau.
-    AvisVersion {
-        id: avis
-        onVersionDisponible: function (version, adresse) {
-            fenetre.versionNouvelle = version
-            fenetre.pageVersion = adresse
-        }
+    // Avis de nouvelle version et mise à jour assistée, comme dans MMail : la
+    // dernière publication du dépôt, demandée à l'API de GitHub un quart de
+    // minute après le démarrage, puis une fois par jour. Une version plus
+    // récente se propose — l'installer maintenant, à la fermeture de MMdedit, ou
+    // jamais. Le paquet est téléchargé et contrôlé par le noyau, installé par le
+    // programme une fois MMdedit fermé (cf. cpp/installeur.h). Coupé pour la
+    // machine par « AvisVersion » à 0, et pendant le contrôle de fabrication,
+    // qui ne sort pas sur le réseau.
+    MiseAJour {
+        id: miseAJour
+        onDisponible: function (version, page) { fenetre.versionDisponible(version, page) }
+        onProgression: function (version, pourcent) { fenetre.progressionMiseAJour = pourcent }
+        onPrete: function (version, fichier) { fenetre.miseAJourPrete(version, fichier) }
+        onEchec: function (version, message) { fenetre.miseAJourEchouee(version, message) }
     }
+    Installeur { id: installeur }
+    // Choix fait pour une version : « maintenant », « fermeture » ou « jamais ».
+    // Une version plus récente se propose de nouveau.
+    Settings {
+        id: reglagesMiseAJour
+        category: "miseAJour"
+        property string version: ""
+        property string choix: ""
+    }
+    // Version plus récente publiée, et sa page ; vide sinon.
     property string versionNouvelle: ""
     property string pageVersion: ""
+    // Bandeau de mise à jour : "" (caché), "proposee", "telechargement",
+    // "prete" ou "echec".
+    property string etatMiseAJour: ""
+    property int progressionMiseAJour: 0
+    property string fichierMiseAJour: ""
+    property string erreurMiseAJour: ""
+    // Paquet que cette copie sait installer seule (« setup », « appimage ») ;
+    // vide : la page de la version s'ouvre, comme en 0.4.7.
+    readonly property string genreMiseAJour: installeur.genre()
+    // Scénario d'essai de l'intégration continue (MMDEDIT_SCENARIO), ou "".
+    readonly property string scenario: typeof scenarioEssai !== "undefined" ? scenarioEssai : ""
     Timer {
         id: minuteurVersion
-        // Un essai (MMDEDIT_AVIS_ESSAI) n'attend pas : une capture est prise une
-        // demi-seconde après l'ouverture.
-        interval: (typeof essaiAvis !== "undefined" && essaiAvis) ? 100 : 15000
+        // Un essai (MMDEDIT_AVIS_ESSAI, scénario) n'attend pas : une capture est
+        // prise une demi-seconde après l'ouverture.
+        interval: (typeof essaiAvis !== "undefined" && essaiAvis) || fenetre.scenario.length > 0 ? 100 : 15000
         running: typeof avisVersion !== "undefined" && avisVersion
                  && !(typeof modeControle !== "undefined" && modeControle)
         repeat: true
         onTriggered: {
+            if (interval !== 24 * 3600 * 1000)
+                fenetre.nettoyerMisesAJour()
             interval = 24 * 3600 * 1000
-            avis.verifierVersion()
+            miseAJour.verifier()
         }
     }
 
@@ -448,36 +475,108 @@ ApplicationWindow {
     }
 
     // ------------------------------------------------------- nouvelle version
-    // Bandeau jusqu'à « Plus tard », qui le tait jusqu'au prochain démarrage.
-    // « Télécharger » ouvre la page de la publication : rien ne s'installe seul.
+    // Proposée jusqu'à un choix ; puis son téléchargement, et l'invitation à
+    // redémarrer pour « Maintenant ». Là où rien ne s'installe seul (Android,
+    // macOS, programme compilé sur place), « Télécharger » ouvre la page de la
+    // publication, comme en 0.4.7.
     Rectangle {
         id: bandeauVersion
         anchors.left: parent.left
         anchors.right: parent.right
         anchors.top: parent.top
-        height: visible ? ligneVersion.implicitHeight + 12 : 0
-        visible: fenetre.versionNouvelle.length > 0
-        color: Qt.tint(fenetre.palette.base, "#3388c86a")
-        RowLayout {
-            id: ligneVersion
+        height: visible ? grilleVersion.implicitHeight + 12 : 0
+        visible: fenetre.etatMiseAJour.length > 0
+        color: Qt.tint(fenetre.palette.base, fenetre.etatMiseAJour === "echec" ? "#33c42b1c" : "#3388c86a")
+        readonly property string etat: fenetre.etatMiseAJour
+        readonly property bool installable: fenetre.genreMiseAJour.length > 0
+        GridLayout {
+            id: grilleVersion
             anchors.fill: parent
             anchors.leftMargin: 10
             anchors.rightMargin: 6
-            spacing: 8
+            anchors.topMargin: 6
+            anchors.bottomMargin: 6
+            columns: fenetre.width < 720 ? 1 : 2
+            columnSpacing: 8
+            rowSpacing: 4
             Label {
+                id: texteVersion
                 Layout.fillWidth: true
                 wrapMode: Text.Wrap
-                text: qsTr("Une nouvelle version de MMdedit est disponible : %1 (vous utilisez la %2).")
-                      .arg(fenetre.versionNouvelle).arg(Qt.application.version)
+                textFormat: Text.StyledText
+                text: fenetre.texteMiseAJour()
+                onLinkActivated: function (lien) { Qt.openUrlExternally(lien) }
             }
-            Button {
-                text: qsTr("Télécharger")
-                onClicked: Qt.openUrlExternally(fenetre.pageVersion)
-            }
-            Button {
-                text: qsTr("Plus tard")
-                flat: true
-                onClicked: fenetre.versionNouvelle = ""
+            RowLayout {
+                spacing: 6
+                Layout.alignment: Qt.AlignRight | Qt.AlignVCenter
+                ProgressBar {
+                    visible: bandeauVersion.etat === "telechargement"
+                    from: 0
+                    to: 100
+                    value: fenetre.progressionMiseAJour
+                    Layout.preferredWidth: 160
+                }
+                Button {
+                    visible: bandeauVersion.etat === "proposee" && bandeauVersion.installable
+                    text: qsTr("Maintenant")
+                    highlighted: true
+                    onClicked: fenetre.choisirMiseAJour("maintenant")
+                }
+                Button {
+                    visible: bandeauVersion.etat === "proposee" && bandeauVersion.installable
+                    text: qsTr("À la fermeture")
+                    onClicked: fenetre.choisirMiseAJour("fermeture")
+                }
+                Button {
+                    visible: bandeauVersion.etat === "proposee" && !bandeauVersion.installable
+                    text: qsTr("Télécharger")
+                    onClicked: Qt.openUrlExternally(fenetre.pageVersion)
+                }
+                Button {
+                    visible: bandeauVersion.etat === "proposee" && !bandeauVersion.installable
+                    text: qsTr("Plus tard")
+                    flat: true
+                    onClicked: fenetre.etatMiseAJour = ""
+                }
+                Button {
+                    visible: bandeauVersion.etat === "proposee"
+                    text: qsTr("Jamais")
+                    flat: true
+                    onClicked: fenetre.choisirMiseAJour("jamais")
+                }
+                Button {
+                    visible: bandeauVersion.etat === "prete"
+                    text: qsTr("Redémarrer MMdedit")
+                    highlighted: true
+                    onClicked: fenetre.redemarrerPourMettreAJour()
+                }
+                Button {
+                    visible: bandeauVersion.etat === "prete"
+                    text: qsTr("À la fermeture")
+                    flat: true
+                    onClicked: {
+                        reglagesMiseAJour.choix = "fermeture"
+                        fenetre.etatMiseAJour = ""
+                    }
+                }
+                Button {
+                    visible: bandeauVersion.etat === "echec" && bandeauVersion.installable
+                    text: qsTr("Réessayer")
+                    onClicked: fenetre.telechargerMiseAJour()
+                }
+                Button {
+                    visible: bandeauVersion.etat === "echec"
+                    text: qsTr("Page de téléchargement")
+                    flat: true
+                    onClicked: Qt.openUrlExternally(fenetre.pageVersion)
+                }
+                Button {
+                    visible: bandeauVersion.etat === "echec"
+                    text: qsTr("Fermer")
+                    flat: true
+                    onClicked: fenetre.etatMiseAJour = ""
+                }
             }
         }
     }
@@ -727,6 +826,10 @@ ApplicationWindow {
                 fenetre.poursuivre()
             } else {
                 fenetre.apresEnregistrement = ""
+                // Fermeture annulée : la mise à jour, s'il y en a une, reste
+                // retenue pour la fermeture, sans relance.
+                if (installeur.programme())
+                    installeur.programmer(fenetre.fichierMiseAJour, false)
             }
         }
     }
@@ -771,6 +874,13 @@ ApplicationWindow {
                  + qsTr("Texte complet : fichier <code>LICENSE</code> livré avec le programme, ou ")
                  + "<a href=\"https://www.gnu.org/licenses/gpl-3.0.html\">gnu.org/licenses/gpl-3.0</a>."
                  + "</p><p>" + qsTr("Qt est distribué sous licence LGPL v3 par le Qt Project.") + "</p>"
+                 // Version plus récente : son lien reste ici, même après « Jamais ».
+                 + (fenetre.versionNouvelle.length > 0
+                    ? "<p>" + qsTr("Version %1 disponible : <a href=\"%2\">page de téléchargement</a>.")
+                              .arg(fenetre.versionNouvelle).arg(fenetre.pageVersion)
+                      + (installeur.programme() && fenetre.genreMiseAJour === "setup"
+                         ? " " + qsTr("Elle s'installera à la fermeture de MMdedit.") : "") + "</p>"
+                    : "")
     }
 
     // Une erreur du noyau se voit aussitôt, d'où qu'elle vienne.
@@ -969,14 +1079,165 @@ ApplicationWindow {
             dlgOuvrir.open()
         else if (action === "deposer")
             charger(urlAOuvrir)
-        else if (action === "quitter")
+        else if (action === "quitter") {
+            retenirPourLaFermeture()
             Qt.quit()
+        }
     }
 
     onClosing: function (fermeture) {
         if (modifie) {
             fermeture.accepted = false
             avecEnregistrement("quitter")
+        } else {
+            retenirPourLaFermeture()
+        }
+    }
+
+    // ---------------------------------------------------------- mise à jour
+    function texteMiseAJour() {
+        var v = versionNouvelle
+        var actuelle = miseAJour.versionActuelle()
+        var autorisation = installeur.pourTousLesUtilisateurs()
+                ? " " + qsTr("Windows demandera l'autorisation d'un administrateur.") : ""
+        switch (etatMiseAJour) {
+        case "proposee":
+            if (genreMiseAJour.length === 0)
+                return qsTr("Une nouvelle version de MMdedit est disponible : %1 (vous utilisez la %2).")
+                       .arg(v).arg(actuelle)
+            return qsTr("MMdedit %1 est disponible — vous utilisez la %2 (<a href=\"%3\">nouveautés</a>). L'installer :")
+                   .arg(v).arg(actuelle).arg(pageVersion) + autorisation
+        case "telechargement":
+            return qsTr("Téléchargement de MMdedit %1… %2 %").arg(v).arg(progressionMiseAJour)
+        case "prete":
+            if (genreMiseAJour === "appimage")
+                return qsTr("MMdedit %1 est installé : redémarrez MMdedit pour l'utiliser.").arg(v)
+            return qsTr("MMdedit %1 est prêt : redémarrez MMdedit pour l'installer.").arg(v) + autorisation
+        case "echec":
+            return qsTr("La mise à jour vers MMdedit %1 n'a pas abouti — %2").arg(v).arg(erreurMiseAJour)
+        }
+        return ""
+    }
+
+    function versionDisponible(version, page) {
+        versionNouvelle = version
+        pageVersion = page
+        var choix = reglagesMiseAJour.version === version ? reglagesMiseAJour.choix : ""
+        if (choix === "jamais") {
+            etatMiseAJour = ""
+        } else if (genreMiseAJour.length > 0 && (choix === "maintenant" || choix === "fermeture")) {
+            // Choix déjà fait : le paquet est repris, ou retrouvé intact.
+            if (etatMiseAJour !== "prete")
+                telechargerMiseAJour()
+        } else {
+            etatMiseAJour = "proposee"
+        }
+        if (scenario.indexOf("mise-a-jour") === 0)
+            etapeScenarioMiseAJour("proposee")
+    }
+
+    function choisirMiseAJour(choix) {
+        reglagesMiseAJour.version = versionNouvelle
+        reglagesMiseAJour.choix = choix
+        if (choix === "jamais") {
+            etatMiseAJour = ""
+            flash(qsTr("La version %1 ne sera plus proposée ; son lien reste dans « À propos ».")
+                  .arg(versionNouvelle))
+            return
+        }
+        if (choix === "fermeture")
+            flash(qsTr("MMdedit %1 sera installé à la fermeture de MMdedit.").arg(versionNouvelle))
+        telechargerMiseAJour()
+    }
+
+    function telechargerMiseAJour() {
+        erreurMiseAJour = ""
+        progressionMiseAJour = 0
+        // « À la fermeture » : en silence, sauf échec.
+        etatMiseAJour = reglagesMiseAJour.choix === "maintenant" ? "telechargement" : ""
+        miseAJour.telecharger(versionNouvelle, genreMiseAJour, installeur.destination(versionNouvelle))
+    }
+
+    function miseAJourPrete(version, fichier) {
+        if (version !== versionNouvelle)
+            return
+        fichierMiseAJour = fichier
+        // Installé à la fermeture, quoi qu'il arrive ; « Redémarrer » rouvre MMdedit.
+        installeur.programmer(fichier, false)
+        etatMiseAJour = reglagesMiseAJour.choix === "maintenant" ? "prete" : ""
+        if (scenario.indexOf("mise-a-jour") === 0)
+            etapeScenarioMiseAJour("prete")
+    }
+
+    function miseAJourEchouee(version, message) {
+        erreurMiseAJour = message
+        etatMiseAJour = "echec"
+        if (scenario.indexOf("mise-a-jour") === 0)
+            etapeScenarioMiseAJour("echec")
+    }
+
+    // La fermeture suit son cours ordinaire : un document modifié fait demander
+    // s'il faut l'enregistrer, et « Annuler » garde MMdedit ouvert. Sous
+    // Windows, un autre MMdedit ouvert empêcherait l'installeur de remplacer
+    // les fichiers sans le fermer d'office : il faut le fermer d'abord.
+    function redemarrerPourMettreAJour() {
+        var autres = installeur.autresOuverts()
+        if (autres > 0) {
+            flash(qsTr("%n autre(s) fenêtre(s) de MMdedit ouverte(s) : fermez-les d'abord. "
+                       + "La mise à jour s'installera à la fermeture de la dernière.", "", autres))
+            return
+        }
+        installeur.programmer(fichierMiseAJour, true)
+        fenetre.close()
+    }
+
+    // Choix « maintenant » ou « fermeture » fait dans un autre MMdedit, dont le
+    // paquet attend : celui-ci, s'il se ferme le dernier, l'installe.
+    function retenirPourLaFermeture() {
+        if (installeur.programme() || genreMiseAJour !== "setup")
+            return
+        var v = reglagesMiseAJour.version
+        if ((reglagesMiseAJour.choix === "maintenant" || reglagesMiseAJour.choix === "fermeture")
+                && miseAJour.aInstaller(v, installeur.destination(v)))
+            installeur.programmer(installeur.destination(v), false)
+    }
+
+    // Paquets d'une version installée ou abandonnée, téléchargements
+    // interrompus : effacés au démarrage.
+    function nettoyerMisesAJour() {
+        if (genreMiseAJour.length === 0)
+            return
+        var garder = reglagesMiseAJour.choix !== "jamais" && reglagesMiseAJour.version.length > 0
+                ? installeur.destination(reglagesMiseAJour.version) : ""
+        miseAJour.nettoyer(genreMiseAJour, installeur.dossier(), garder)
+    }
+
+    // Scénarios « mise-a-jour » et « mise-a-jour-fermeture » (MMDEDIT_SCENARIO) :
+    // MMdedit se croit ancien (MMDEDIT_VERSION_ESSAI), installé par l'installeur
+    // ou lancé en AppImage. La dernière publication est proposée, choisie
+    // « Maintenant » (ou « À la fermeture »), téléchargée et contrôlée ; puis
+    // MMdedit redémarre (ou se ferme), et le programme l'installe.
+    function etapeScenarioMiseAJour(etape) {
+        var fermeture = scenario === "mise-a-jour-fermeture"
+        console.log("scenario: mise à jour", etape, "| publiée", versionNouvelle, "| actuelle",
+                    miseAJour.versionActuelle(), "| genre", genreMiseAJour, "| état", etatMiseAJour,
+                    "| fichier", fichierMiseAJour, "| programmée", installeur.programme(), erreurMiseAJour)
+        if (etape === "proposee" && etatMiseAJour === "proposee") {
+            var choix = Qt.createQmlObject('import QtQuick; Timer { interval: 1500 }', fenetre)
+            choix.triggered.connect(function () { choisirMiseAJour(fermeture ? "fermeture" : "maintenant") })
+            choix.start()
+        } else if (etape === "prete") {
+            var pause = Qt.createQmlObject('import QtQuick; Timer { interval: 1500 }', fenetre)
+            pause.triggered.connect(function () {
+                console.log("scenario: mise à jour —", fermeture ? "fermeture" : "redémarrage")
+                if (fermeture)
+                    fenetre.close()
+                else
+                    redemarrerPourMettreAJour()
+            })
+            pause.start()
+        } else if (etape === "echec") {
+            Qt.quit()
         }
     }
 
@@ -1080,12 +1341,29 @@ ApplicationWindow {
         pont.colorer(editeur.textDocument, doc.format)
 
         // Avis de nouvelle version : coupé pendant le contrôle — la fabrication
-        // ne sort pas sur le réseau —, et le bandeau ne paraît qu'avec un numéro.
+        // ne sort pas sur le réseau —, et le bandeau ne paraît qu'une version
+        // proposée. Ni choix ni réglage n'est touché : seul l'affichage l'est.
         verifier("avis coupe en controle", minuteurVersion.running, false)
         verifier("bandeau masque", bandeauVersion.visible, false)
         versionNouvelle = "9.9.9"
+        pageVersion = "https://github.com/mmedia-fr/mmdedit/releases/tag/v9.9.9"
+        etatMiseAJour = "proposee"
         verifier("bandeau montre", bandeauVersion.visible, true)
+        verifier("bandeau numero", texteVersion.text.indexOf("9.9.9") >= 0, true)
+        etatMiseAJour = "telechargement"
+        progressionMiseAJour = 42
+        verifier("bandeau progression", texteVersion.text.indexOf("42") >= 0, true)
+        etatMiseAJour = "echec"
+        erreurMiseAJour = "essai"
+        verifier("bandeau echec", texteVersion.text.indexOf("essai") >= 0, true)
+        verifier("genre connu", ["", "setup", "appimage"].indexOf(genreMiseAJour) >= 0, true)
+        verifier("rien de programme", installeur.programme(), false)
+        etatMiseAJour = ""
+        erreurMiseAJour = ""
+        progressionMiseAJour = 0
         versionNouvelle = ""
+        pageVersion = ""
+        verifier("bandeau remasque", bandeauVersion.visible, false)
 
         // Détection des modifications : une frappe réelle marque toujours le
         // document — la comparaison au texte de référence ne l'a pas rendue muette.
@@ -1105,6 +1383,11 @@ ApplicationWindow {
     }
 
     Component.onCompleted: {
+        // Un scénario de mise à jour part d'un choix vierge.
+        if (scenario.indexOf("mise-a-jour") === 0) {
+            reglagesMiseAJour.version = ""
+            reglagesMiseAJour.choix = ""
+        }
         pont.colorer(editeur.textDocument, doc.format)
         // « MMdedit fichier.md », et le « Ouvrir avec » de Windows qui s'y ramène.
         if (typeof fichierInitial !== "undefined" && fichierInitial.toString().length > 0)

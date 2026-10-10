@@ -90,8 +90,9 @@ L'aperçu reste rouvrable à la main par le menu *Affichage*.
   cours. Aucune sauvegarde automatique.
 - Glisser-déposer d'un fichier sur la fenêtre, et ouverture par argument
   (`MMdedit fichier.md`).
-- **Avis de nouvelle version** — un bandeau signale la publication d'une
-  version plus récente (cf. *Avis de nouvelle version* ci-dessous).
+- **Mise à jour assistée** — un bandeau signale une version plus récente, et
+  l'installe maintenant (un redémarrage de MMdedit), à la fermeture, ou jamais
+  (cf. *Avis de nouvelle version et mise à jour* ci-dessous).
 
 ## Encodage
 
@@ -113,22 +114,48 @@ Chaque version est publiée en **release GitHub**, avec ses sources :
 macOS est construit et contrôlé en intégration continue, par portabilité du
 code, mais n'est pas distribué.
 
-### Avis de nouvelle version
+### Avis de nouvelle version et mise à jour
 
 MMdedit signale une nouvelle version par un bandeau en haut de la fenêtre,
 après avoir demandé à l'API de GitHub la dernière publication du dépôt — un
-quart de minute après le démarrage, puis une fois par jour. *Télécharger*
-ouvre la page de la publication dans le navigateur ; *Plus tard* le tait
-jusqu'au prochain démarrage. Rien d'autre n'est envoyé, rien ne s'installe
-seul : c'est la seule sortie réseau du programme, et une version en préparation
-(« 0.4.8-essai ») n'est jamais annoncée.
+quart de minute après le démarrage, puis une fois par jour. Rien d'autre n'est
+envoyé : c'est la seule sortie réseau du programme, et une version en
+préparation (« 0.4.9-essai ») n'est jamais annoncée.
 
-Sur un parc dont l'administrateur déploie lui-même les mises à jour, l'avis se
-coupe pour toute la machine, par une valeur ou une variable d'environnement :
+Le bandeau propose de l'installer **maintenant**, **à la fermeture** de
+MMdedit, ou **jamais** :
+
+- *Maintenant* : le paquet se télécharge, son empreinte est contrôlée contre le
+  fichier `SHA256SUMS` de la publication, puis le bandeau invite à
+  **redémarrer MMdedit** — un clic : MMdedit se ferme (en demandant, comme
+  toujours, s'il faut enregistrer un document modifié), la mise à jour
+  s'installe sans question et MMdedit se rouvre. Sans ce clic, elle s'installe
+  à la fermeture.
+- *À la fermeture* : même téléchargement, en silence ; l'installation suit la
+  fermeture de MMdedit. Pas pendant un arrêt ou une déconnexion de la session :
+  elle attend alors la fermeture suivante.
+- *Jamais* : cette version n'est plus proposée ; son lien reste dans « À
+  propos ». Une version plus récente se propose de nouveau.
+
+Sous Windows, l'installeur est lancé sans question (`/VERYSILENT`, ou
+`/SILENT` avec sa barre d'avancement quand MMdedit doit se rouvrir) et attend
+la fin de MMdedit avant de remplacer ses fichiers. **Plusieurs MMdedit ouverts**
+— un par document — : l'installation attend la fermeture du dernier, pour
+qu'aucun ne soit fermé d'office. Une installation pour tous les utilisateurs
+(dans Program Files) demande l'autorisation d'un administrateur : elle n'est
+proposée qu'à un compte qui peut la donner — sinon, comme sous Android ou pour
+un programme compilé sur place, le bandeau propose *Télécharger*, qui ouvre la
+page de la version. En AppImage, le fichier est remplacé sur place, sous son
+nom : ses raccourcis restent bons. Le journal de la dernière installation
+Windows est `%LOCALAPPDATA%\M-Media\MMdedit\mises-a-jour\derniere-installation.log`.
+
+Sur un parc dont l'administrateur déploie lui-même les mises à jour, l'avis —
+et avec lui la mise à jour assistée — se coupe pour toute la machine, par une
+valeur ou une variable d'environnement :
 
 | Valeur | Variable | Effet |
 |---|---|---|
-| `AvisVersion` | `MMDEDIT_AVIS_VERSION` | 0 : ne pas signaler les nouvelles versions |
+| `AvisVersion` | `MMDEDIT_AVIS_VERSION` | 0 : ne pas signaler les nouvelles versions, ni les installer |
 
 La valeur se lit dans `HKLM\Software\M-Media\MMdedit` sous Windows, et dans la
 section `[General]` de `/etc/xdg/M-Media/MMdedit.conf` sous Linux. Par exemple,
@@ -219,9 +246,18 @@ et sa protection, les trois apparences, puis relit le PDF produit.
 `MMDEDIT_AVIS_ESSAI=9.9.9`, le bandeau de nouvelle version y paraît sans rien
 demander à GitHub.
 
+`MMDEDIT_VERSION_ESSAI=0.0.1` fait se croire ancien un MMdedit d'essai : il
+propose la dernière publication, et l'installe pour de bon. Avec
+`MMDEDIT_SCENARIO=mise-a-jour` (ou `mise-a-jour-fermeture`), il choisit
+lui-même « Maintenant » (ou « À la fermeture ») et redémarre (ou se ferme).
+
 L'intégration continue le fait tourner **sur le paquet déployé** (dossier
 windeployqt, AppImage), ouvre un fichier au nom et au contenu accentués, et
-installe puis lance l'APK sur un émulateur Android 34.
+installe puis lance l'APK sur un émulateur Android 34. Sous Windows, elle
+éprouve la mise à jour assistée de bout en bout depuis l'installé
+(téléchargement, fermeture, installeur silencieux, version relue au registre),
+puis l'installeur de la fabrication seul : attente du processus désigné,
+installation, MMdedit rouvert.
 
 ## Arborescence
 

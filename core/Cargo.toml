@@ -1,6 +1,6 @@
 [package]
 name = "mmdedit_core"
-version = "0.4.7"
+version = "0.4.8"
 edition = "2021"
 rust-version = "1.85"
 license = "GPL-3.0-or-later"
@@ -14,10 +14,13 @@ cxx = "1.0"
 cxx-qt = "0.10"
 cxx-qt-lib = { version = "0.10", features = ["qt_full"] }
 
-# Avis de nouvelle version (cf. src/version.rs) : la seule sortie réseau du
-# programme. TLS en pur Rust, comme MMail : rien à compiler d'OpenSSL pour
+# Avis de nouvelle version et mise à jour assistée (cf. src/mise_a_jour.rs) :
+# la seule sortie réseau du programme. TLS en pur Rust, comme MMail : rien à compiler d'OpenSSL pour
 # Android, et les mêmes autorités sur toutes les cibles.
 rustls = "0.23"
+# Empreinte SHA-256 des paquets de mise à jour : le fournisseur cryptographique
+# que rustls compile déjà, avec les mêmes options — rien de plus à construire.
+aws-lc-rs = { version = "1", default-features = false, features = ["aws-lc-sys", "prebuilt-nasm"] }
 # Description de la publication rendue par l'API de GitHub.
 serde_json = "1"
 

@@ -3,9 +3,9 @@
 pub mod document;
 pub mod edition;
 pub mod http;
+pub mod mise_a_jour;
 pub mod pont_edition;
 pub mod pont_presse_papier;
 pub mod presse_papier;
 pub mod socle;
 pub mod texte;
-pub mod version;
