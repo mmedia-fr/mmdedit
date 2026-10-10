@@ -75,6 +75,22 @@ ApplicationWindow {
         }
     }
 
+    // ------------------------------------------------------------------- zoom
+    // L'apparence fixe les tailles de police ; le zoom les multiplie, dans les
+    // deux vues à la fois, et se conserve d'une session à l'autre.
+    property real zoom: 1.0
+    readonly property real zoomMin: 0.5
+    readonly property real zoomMax: 3.0
+    readonly property real pasZoom: 0.1
+    // Base de l'éditeur : la police à pas fixe de l'apparence.
+    readonly property real tailleEditeur: (fenetre.jeu && fenetre.jeu.tailleMono
+                                           ? fenetre.jeu.tailleMono : 11) * zoom
+    // Base de l'aperçu : la police de la fenêtre, donc celle de l'apparence — ou
+    // celle du bureau en apparence « système », où « jeu » est nul. Une police
+    // définie en pixels rend un pointSize négatif : repli sur 10.
+    readonly property real tailleApercu: (fenetre.font.pointSize > 0
+                                          ? fenetre.font.pointSize : 10) * zoom
+
     // Le document a-t-il changé depuis sa dernière écriture ? QML en est seul
     // juge : c'est le TextArea qui édite le texte, le noyau ne le détient pas.
     property bool modifie: false
@@ -107,6 +123,11 @@ ApplicationWindow {
     Settings {
         category: "edition"
         property alias copieAuto: actCopieAuto.checked
+    }
+
+    Settings {
+        category: "affichage"
+        property alias zoom: fenetre.zoom
     }
 
     Settings {
@@ -247,6 +268,27 @@ ApplicationWindow {
         checked: true
         onTriggered: fenetre.basculerVue(actVoirApercu, actVoirEditeur)
     }
+    Action {
+        id: actZoomPlus
+        text: qsTr("Zoom a&vant")
+        shortcut: StandardKey.ZoomIn
+        enabled: fenetre.zoom < fenetre.zoomMax
+        onTriggered: fenetre.changerZoom(fenetre.pasZoom)
+    }
+    Action {
+        id: actZoomMoins
+        text: qsTr("Zoom a&rrière")
+        shortcut: StandardKey.ZoomOut
+        enabled: fenetre.zoom > fenetre.zoomMin
+        onTriggered: fenetre.changerZoom(-fenetre.pasZoom)
+    }
+    Action {
+        id: actZoomNormal
+        text: qsTr("Taille &normale")
+        shortcut: "Ctrl+0"
+        enabled: fenetre.zoom !== 1.0
+        onTriggered: fenetre.reglerZoom(1.0)
+    }
 
     menuBar: MenuBar {
         Menu {
@@ -278,6 +320,10 @@ ApplicationWindow {
             title: qsTr("&Affichage")
             MenuItem { action: actVoirEditeur }
             MenuItem { action: actVoirApercu }
+            MenuSeparator {}
+            MenuItem { action: actZoomPlus }
+            MenuItem { action: actZoomMoins }
+            MenuItem { action: actZoomNormal }
             MenuSeparator {}
             Menu {
                 title: qsTr("A&pparence")
@@ -367,6 +413,13 @@ ApplicationWindow {
         onActivated: fenetre.encadrer("*")
     }
 
+    // StandardKey.ZoomIn ne vaut que Ctrl++, qui demande la touche Maj sur un
+    // clavier français : Ctrl+= mène au même endroit, comme dans un navigateur.
+    Shortcut {
+        sequence: "Ctrl+="
+        onActivated: fenetre.changerZoom(fenetre.pasZoom)
+    }
+
     // ------------------------------------------------------------------- vues
     SplitView {
         id: partage
@@ -389,7 +442,7 @@ ApplicationWindow {
                 // TextArea transparent, et la zone prendrait la couleur de fenêtre.
                 background: Rectangle { color: fenetre.palette.base }
                 font.family: fenetre.jeu && fenetre.jeu.mono ? fenetre.jeu.mono : "monospace"
-                font.pointSize: fenetre.jeu && fenetre.jeu.tailleMono ? fenetre.jeu.tailleMono : 11
+                font.pointSize: fenetre.tailleEditeur
                 onTextChanged: {
                     // Une fois le document modifié, plus rien à comparer : la
                     // lecture du texte entier n'a lieu qu'avant la première frappe.
@@ -401,6 +454,13 @@ ApplicationWindow {
                 // La sélection est copiée quand elle se stabilise, pas à chaque
                 // pixel du glisser de souris.
                 onSelectedTextChanged: fenetre.selectionChangee("saisie")
+
+                // Ctrl + molette : zoom. Le modificateur exigé laisse la molette
+                // nue au défilement du ScrollView, qui la traite comme avant.
+                WheelHandler {
+                    acceptedModifiers: Qt.ControlModifier
+                    onWheel: function (molette) { fenetre.zoomMolette(molette) }
+                }
             }
         }
 
@@ -418,6 +478,11 @@ ApplicationWindow {
                 textFormat: TextEdit.MarkdownText
                 wrapMode: TextEdit.Wrap
                 background: Rectangle { color: fenetre.palette.base }
+                font.pointSize: fenetre.tailleApercu
+                // Même raison que pour la largeur : la mise en page du rendu est
+                // figée au chargement du texte, un changement de taille de police
+                // demande donc de le recharger (cf. rafraichir()).
+                onFontChanged: minuteurApercu.restart()
                 // Sans largeur imposée, le document rendu prend sa largeur naturelle
                 // et les tableaux Markdown sortent écrasés sur quelques pixels.
                 width: volet_apercu.availableWidth
@@ -429,9 +494,25 @@ ApplicationWindow {
                 // c'est de là qu'on copie une phrase mise en forme plutôt que sa
                 // source Markdown.
                 onSelectedTextChanged: fenetre.selectionChangee("rendu")
+
+                WheelHandler {
+                    acceptedModifiers: Qt.ControlModifier
+                    onWheel: function (molette) { fenetre.zoomMolette(molette) }
+                }
                 // Le rendu suit le texte avec un temps de retard (minuteurApercu) :
                 // le recalculer à chaque frappe fait ramer dès quelques pages.
             }
+        }
+
+        // Pincement à deux doigts : le même zoom au doigt, pour la version
+        // Android. Deux points de contact sont exigés, le geste ne prend donc
+        // rien au défilement ni à la sélection, qui n'en demandent qu'un.
+        PinchHandler {
+            target: null
+            // Facteur au début du geste : « activeScale » lui est relatif.
+            property real zoomDepart: 1.0
+            onActiveChanged: if (active) zoomDepart = fenetre.zoom
+            onActiveScaleChanged: if (active) fenetre.reglerZoom(zoomDepart * activeScale)
         }
     }
 
@@ -459,6 +540,12 @@ ApplicationWindow {
             }
             Label { text: doc.libelle }
             Label { text: doc.encodage }
+            Label {
+                // Niveau de zoom, affiché seulement hors de 100 % : la barre
+                // d'état est déjà chargée, et le cas ordinaire n'apprend rien.
+                text: Math.round(fenetre.zoom * 100) + " %"
+                visible: fenetre.zoom !== 1.0
+            }
             Label { id: compteurs; text: doc.statistiques("") }
             Label {
                 // Origine du contenu du presse-papier, et délai pendant lequel la
@@ -630,19 +717,23 @@ ApplicationWindow {
         minuteurMessage.restart()
     }
 
-    // Largeur de l'aperçu lors du dernier rendu : sert à savoir s'il faut forcer
-    // une nouvelle mise en page.
+    // Largeur et taille de police de l'aperçu lors du dernier rendu : servent à
+    // savoir s'il faut forcer une nouvelle mise en page.
     property real largeurRendue: 0
+    property real tailleRendue: 0
 
     function rafraichir() {
         var rendu = doc.estMarkdown() ? editeur.text : ""
         // Qt ne remet en page qu'au (re)chargement du texte : à texte inchangé et
-        // largeur nouvelle, il faut le vider d'abord, sans quoi un tableau garde
-        // les largeurs de colonnes calculées pour l'ancienne fenêtre.
-        if (rendu === apercu.text && apercu.width !== largeurRendue)
+        // largeur — ou taille de police — nouvelle, il faut le vider d'abord, sans
+        // quoi un tableau garde les largeurs de colonnes calculées pour l'ancienne
+        // fenêtre, et un titre la hauteur de ligne de l'ancien zoom.
+        if (rendu === apercu.text && (apercu.width !== largeurRendue
+                                      || apercu.font.pointSize !== tailleRendue))
             apercu.text = ""
         apercu.text = rendu
         largeurRendue = apercu.width
+        tailleRendue = apercu.font.pointSize
         compteurs.text = doc.statistiques(editeur.text)
     }
 
@@ -698,6 +789,29 @@ ApplicationWindow {
     function entourer(avant, apres) {
         appliquerPlan(moteurEdition.entourer(editeur.text, editeur.selectionStart,
                                              editeur.selectionEnd, avant, apres))
+    }
+
+    // Un cran de zoom, dans un sens ou dans l'autre.
+    function changerZoom(pas) {
+        reglerZoom(zoom + pas)
+    }
+
+    // Facteur borné, arrondi au centième : sans cet arrondi, une série de crans
+    // de 0,1 accumule les erreurs du calcul flottant et le retour à 100 % rate.
+    function reglerZoom(facteur) {
+        var borne = Math.max(zoomMin, Math.min(zoomMax, Math.round(facteur * 100) / 100))
+        if (borne === zoom)
+            return
+        zoom = borne
+        flash(qsTr("Zoom : %1 %").arg(Math.round(zoom * 100)))
+    }
+
+    // Un cran par crantage de molette. Un défilement purement horizontal ne
+    // touche pas au zoom.
+    function zoomMolette(molette) {
+        if (molette.angleDelta.y === 0)
+            return
+        changerZoom(molette.angleDelta.y > 0 ? pasZoom : -pasZoom)
     }
 
     function choisirApparence(nom) {
@@ -861,6 +975,25 @@ ApplicationWindow {
         verifier("apparence moderne", palette.window.toString(), "#f6f7f8")
         choisirApparence("systeme")
         verifier("apparence systeme", palette.window.toString(), fondSysteme.toString())
+
+        // Zoom : les deux vues suivent le facteur, qui reste borné et revient
+        // exactement à sa valeur d'origine au retour à 100 %.
+        reglerZoom(1.0)
+        var editeurA100 = editeur.font.pointSize
+        var apercuA100 = apercu.font.pointSize
+        changerZoom(pasZoom)
+        verifier("zoom facteur", zoom, 1.1)
+        verifier("zoom editeur", Math.round(editeur.font.pointSize * 1000),
+                 Math.round(editeurA100 * 1.1 * 1000))
+        verifier("zoom apercu", Math.round(apercu.font.pointSize * 1000),
+                 Math.round(apercuA100 * 1.1 * 1000))
+        reglerZoom(42)
+        verifier("zoom plafond", zoom, zoomMax)
+        reglerZoom(0.01)
+        verifier("zoom plancher", zoom, zoomMin)
+        reglerZoom(1.0)
+        verifier("zoom normal", editeur.font.pointSize, editeurA100)
+        verifier("zoom normal apercu", apercu.font.pointSize, apercuA100)
 
         // Détection des modifications : une frappe réelle marque toujours le
         // document — la comparaison au texte de référence ne l'a pas rendue muette.

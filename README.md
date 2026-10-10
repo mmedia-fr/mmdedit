@@ -33,7 +33,8 @@ par défaut.
 ### Lire et écrire du Markdown, et pas seulement
 
 **Édition et aperçu côte à côte, rendu en temps réel.** Chaque vue se masque
-indépendamment (menu *Affichage*), l'une des deux restant toujours visible.
+indépendamment (menu *Affichage*), l'une des deux restant toujours visible, et
+le zoom s'applique aux deux à la fois.
 
 MMdedit ouvre **tout fichier texte**. Le format est déduit de l'extension et
 affiché en barre d'état :
@@ -60,6 +61,12 @@ L'aperçu reste rouvrable à la main par le menu *Affichage*.
   resélectionner. Les marqueurs imbriqués sont distingués — appliquer
   l'italique sur du gras donne `***texte***`, et non `*texte*`.
 - **Coloration syntaxique** dans la zone d'édition.
+- **Zoom** — `Ctrl` + molette, `Ctrl` `+` et `Ctrl` `-`, `Ctrl` `0` pour revenir
+  à 100 %, et pincement à deux doigts sur écran tactile ; les trois entrées
+  correspondantes sont au menu *Affichage*. L'édition et l'aperçu grossissent
+  **ensemble**, de 50 à 300 % par crans de 10 %, à partir des tailles de police
+  de l'apparence retenue. Le niveau s'affiche en barre d'état dès qu'il quitte
+  100 %, et il est mémorisé d'une session à l'autre.
 - **Rechercher / Remplacer**, avec respect de la casse et mot entier.
 - **Copier / Couper / Coller suivent la vue qui a le focus.** L'aperçu étant en
   lecture seule, seul *Copier* y agit.
@@ -68,7 +75,7 @@ L'aperçu reste rouvrable à la main par le menu *Affichage*.
   qui reprend la palette du bureau. Les contrôles sont dessinés par le style
   Fusion de Qt sur toutes les plateformes.
 - **Réglages conservés d'une session à l'autre** : géométrie de la fenêtre,
-  copie automatique, apparence.
+  copie automatique, apparence, niveau de zoom.
 - **Compteur** mots / caractères / lignes en barre d'état.
 - **Export PDF** du rendu.
 - **Avertissement de sauvegarde** à la fermeture si des modifications sont en
