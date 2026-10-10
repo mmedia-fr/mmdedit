@@ -1,6 +1,6 @@
 [package]
 name = "mmdedit_core"
-version = "0.4.6"
+version = "0.4.7"
 edition = "2021"
 rust-version = "1.85"
 license = "GPL-3.0-or-later"
@@ -13,6 +13,23 @@ crate-type = ["staticlib"]
 cxx = "1.0"
 cxx-qt = "0.10"
 cxx-qt-lib = { version = "0.10", features = ["qt_full"] }
+
+# Avis de nouvelle version (cf. src/version.rs) : la seule sortie réseau du
+# programme. TLS en pur Rust, comme MMail : rien à compiler d'OpenSSL pour
+# Android, et les mêmes autorités sur toutes les cibles.
+rustls = "0.23"
+# Description de la publication rendue par l'API de GitHub.
+serde_json = "1"
+
+# Autorités de certification : celles du système sur le bureau, par le
+# vérificateur de plateforme. Sous Android, ce vérificateur exige un composant
+# Java et une initialisation JNI que l'APK n'embarque pas : on y prend les
+# autorités de Mozilla, compilées avec le programme.
+[target.'cfg(not(target_os = "android"))'.dependencies]
+rustls-platform-verifier = "0.6"
+
+[target.'cfg(target_os = "android")'.dependencies]
+webpki-roots = "1"
 
 [build-dependencies]
 cxx-qt-build = "0.10"

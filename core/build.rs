@@ -21,6 +21,7 @@ fn main() {
         "src/document.rs",
         "src/pont_edition.rs",
         "src/pont_presse_papier.rs",
+        "src/version.rs",
     ])
     .build();
 }

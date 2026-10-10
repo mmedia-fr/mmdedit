@@ -3,6 +3,7 @@
 #include <QtCore/QDir>
 #include <QtCore/QFile>
 #include <QtCore/QFileInfo>
+#include <QtCore/QSettings>
 #include <QtCore/QTemporaryFile>
 #include <QtCore/QString>
 #include <QtCore/QStringList>
@@ -49,6 +50,19 @@ static QStringList argumentsUnicode()
 #else
   return QCoreApplication::arguments();
 #endif
+}
+
+/// Réglage valant pour toute la machine : la variable d'environnement d'abord,
+/// puis la clé de portée machine — `HKLM\Software\M-Media\MMdedit` sous Windows,
+/// `/etc/xdg/M-Media/MMdedit.conf` sous Linux. Même règle que MMail.
+static QString reglageMachine(const char* variable, const QString& cle)
+{
+  const QString valeur = qEnvironmentVariable(variable);
+  if (!valeur.isEmpty())
+    return valeur;
+  QSettings machine(QSettings::NativeFormat, QSettings::SystemScope,
+                    QCoreApplication::organizationName(), QCoreApplication::applicationName());
+  return machine.value(cle).toString().trimmed();
 }
 
 int main(int argc, char* argv[])
@@ -104,6 +118,18 @@ int main(int argc, char* argv[])
   if (!fichier.isEmpty())
     fichierInitial = QUrl::fromLocalFile(QFileInfo(fichier).absoluteFilePath());
   engine.rootContext()->setContextProperty(QStringLiteral("fichierInitial"), fichierInitial);
+  // En contrôle de fabrication, l'interface ne sort pas sur le réseau de sa
+  // propre initiative.
+  engine.rootContext()->setContextProperty(QStringLiteral("modeControle"), smoke);
+  // Avis de nouvelle version : coupé pour la machine (« AvisVersion » à 0) sur
+  // un parc dont l'administrateur déploie lui-même les mises à jour.
+  engine.rootContext()->setContextProperty(
+    QStringLiteral("avisVersion"),
+    reglageMachine("MMDEDIT_AVIS_VERSION", QStringLiteral("AvisVersion")) != QStringLiteral("0"));
+  // Commodité de développement (cf. core/src/version.rs) : la vérification part
+  // aussitôt, pour qu'une capture montre le bandeau.
+  engine.rootContext()->setContextProperty(QStringLiteral("essaiAvis"),
+                                           qEnvironmentVariableIsSet("MMDEDIT_AVIS_ESSAI"));
 
   // Chargement par URL qrc plutôt que loadFromModule(), absent de Qt 6.4 (Debian 12).
   const QUrl url(QStringLiteral("qrc:/qt/qml/fr/mmedia/mmdedit/qml/Main.qml"));

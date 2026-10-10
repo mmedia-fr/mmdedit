@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 # MMdedit — noyau Rust (core/), interface Qt 6 / QML.
 cmake_minimum_required(VERSION 3.24)
-project(mmdedit VERSION 0.4.6 LANGUAGES CXX)
+project(mmdedit VERSION 0.4.7 LANGUAGES CXX)
 
 if(CMAKE_CXX_COMPILER_ID STREQUAL "MSVC")
   set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreadedDLL")
@@ -98,6 +98,15 @@ set_target_properties(mmdedit PROPERTIES
 
 if(NOT ANDROID)
   qt_import_qml_plugins(mmdedit)
+endif()
+
+# L'avis de nouvelle version parle au réseau par le noyau Rust, et non par Qt
+# Network : rien ne garantit que la permission soit déduite des modules liés.
+# Elle est donc déclarée ici, comme dans MMail (commande apparue avec Qt 6.8,
+# celui de la fabrication Android).
+if(ANDROID AND COMMAND qt_add_android_permission)
+  qt_add_android_permission(mmdedit NAME android.permission.INTERNET)
+  qt_add_android_permission(mmdedit NAME android.permission.ACCESS_NETWORK_STATE)
 endif()
 
 if(NOT ANDROID)
