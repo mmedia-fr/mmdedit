@@ -90,6 +90,8 @@ L'aperçu reste rouvrable à la main par le menu *Affichage*.
   cours. Aucune sauvegarde automatique.
 - Glisser-déposer d'un fichier sur la fenêtre, et ouverture par argument
   (`MMdedit fichier.md`).
+- **Avis de nouvelle version** — un bandeau signale la publication d'une
+  version plus récente (cf. *Avis de nouvelle version* ci-dessous).
 
 ## Encodage
 
@@ -110,6 +112,31 @@ Chaque version est publiée en **release GitHub**, avec ses sources :
 
 macOS est construit et contrôlé en intégration continue, par portabilité du
 code, mais n'est pas distribué.
+
+### Avis de nouvelle version
+
+MMdedit signale une nouvelle version par un bandeau en haut de la fenêtre,
+après avoir demandé à l'API de GitHub la dernière publication du dépôt — un
+quart de minute après le démarrage, puis une fois par jour. *Télécharger*
+ouvre la page de la publication dans le navigateur ; *Plus tard* le tait
+jusqu'au prochain démarrage. Rien d'autre n'est envoyé, rien ne s'installe
+seul : c'est la seule sortie réseau du programme, et une version en préparation
+(« 0.4.8-essai ») n'est jamais annoncée.
+
+Sur un parc dont l'administrateur déploie lui-même les mises à jour, l'avis se
+coupe pour toute la machine, par une valeur ou une variable d'environnement :
+
+| Valeur | Variable | Effet |
+|---|---|---|
+| `AvisVersion` | `MMDEDIT_AVIS_VERSION` | 0 : ne pas signaler les nouvelles versions |
+
+La valeur se lit dans `HKLM\Software\M-Media\MMdedit` sous Windows, et dans la
+section `[General]` de `/etc/xdg/M-Media/MMdedit.conf` sous Linux. Par exemple,
+lors d'un déploiement :
+
+```bat
+reg add "HKLM\Software\M-Media\MMdedit" /v AvisVersion /t REG_SZ /d 0 /f
+```
 
 ## Installation sous Windows
 
@@ -188,7 +215,9 @@ QT_QPA_PLATFORM=offscreen ctest --test-dir _build --output-on-failure  # fumée
 Le test de fumée (`mmdedit --smoke`) exerce une vraie fenêtre sans écran :
 encadrement, bascules, annulation, recherche, remplacement, copie automatique
 et sa protection, les trois apparences, puis relit le PDF produit.
-`mmdedit --capture fichier.png` rend la fenêtre en image.
+`mmdedit --capture fichier.png` rend la fenêtre en image ; avec
+`MMDEDIT_AVIS_ESSAI=9.9.9`, le bandeau de nouvelle version y paraît sans rien
+demander à GitHub.
 
 L'intégration continue le fait tourner **sur le paquet déployé** (dossier
 windeployqt, AppImage), ouvre un fichier au nom et au contenu accentués, et

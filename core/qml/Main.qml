@@ -115,6 +115,33 @@ ApplicationWindow {
     PressePapier { id: pressePapier }
     ReglePressePapier { id: reglePresse }
 
+    // Avis de nouvelle version, comme dans MMail : la dernière publication du
+    // dépôt, demandée à l'API de GitHub un quart de minute après le démarrage,
+    // puis une fois par jour. Coupé pour la machine par « AvisVersion » à 0, et
+    // pendant le contrôle de fabrication, qui ne sort pas sur le réseau.
+    AvisVersion {
+        id: avis
+        onVersionDisponible: function (version, adresse) {
+            fenetre.versionNouvelle = version
+            fenetre.pageVersion = adresse
+        }
+    }
+    property string versionNouvelle: ""
+    property string pageVersion: ""
+    Timer {
+        id: minuteurVersion
+        // Un essai (MMDEDIT_AVIS_ESSAI) n'attend pas : une capture est prise une
+        // demi-seconde après l'ouverture.
+        interval: (typeof essaiAvis !== "undefined" && essaiAvis) ? 100 : 15000
+        running: typeof avisVersion !== "undefined" && avisVersion
+                 && !(typeof modeControle !== "undefined" && modeControle)
+        repeat: true
+        onTriggered: {
+            interval = 24 * 3600 * 1000
+            avis.verifierVersion()
+        }
+    }
+
     Settings {
         category: "apparence"
         property alias theme: fenetre.apparence
@@ -420,10 +447,48 @@ ApplicationWindow {
         onActivated: fenetre.changerZoom(fenetre.pasZoom)
     }
 
+    // ------------------------------------------------------- nouvelle version
+    // Bandeau jusqu'à « Plus tard », qui le tait jusqu'au prochain démarrage.
+    // « Télécharger » ouvre la page de la publication : rien ne s'installe seul.
+    Rectangle {
+        id: bandeauVersion
+        anchors.left: parent.left
+        anchors.right: parent.right
+        anchors.top: parent.top
+        height: visible ? ligneVersion.implicitHeight + 12 : 0
+        visible: fenetre.versionNouvelle.length > 0
+        color: Qt.tint(fenetre.palette.base, "#3388c86a")
+        RowLayout {
+            id: ligneVersion
+            anchors.fill: parent
+            anchors.leftMargin: 10
+            anchors.rightMargin: 6
+            spacing: 8
+            Label {
+                Layout.fillWidth: true
+                wrapMode: Text.Wrap
+                text: qsTr("Une nouvelle version de MMdedit est disponible : %1 (vous utilisez la %2).")
+                      .arg(fenetre.versionNouvelle).arg(Qt.application.version)
+            }
+            Button {
+                text: qsTr("Télécharger")
+                onClicked: Qt.openUrlExternally(fenetre.pageVersion)
+            }
+            Button {
+                text: qsTr("Plus tard")
+                flat: true
+                onClicked: fenetre.versionNouvelle = ""
+            }
+        }
+    }
+
     // ------------------------------------------------------------------- vues
     SplitView {
         id: partage
-        anchors.fill: parent
+        anchors.top: bandeauVersion.bottom
+        anchors.left: parent.left
+        anchors.right: parent.right
+        anchors.bottom: parent.bottom
         orientation: Qt.Horizontal
 
         ScrollView {
@@ -1013,6 +1078,14 @@ ApplicationWindow {
             verifier("coloration " + cles[i], editeur.text, temoin)
         }
         pont.colorer(editeur.textDocument, doc.format)
+
+        // Avis de nouvelle version : coupé pendant le contrôle — la fabrication
+        // ne sort pas sur le réseau —, et le bandeau ne paraît qu'avec un numéro.
+        verifier("avis coupe en controle", minuteurVersion.running, false)
+        verifier("bandeau masque", bandeauVersion.visible, false)
+        versionNouvelle = "9.9.9"
+        verifier("bandeau montre", bandeauVersion.visible, true)
+        versionNouvelle = ""
 
         // Détection des modifications : une frappe réelle marque toujours le
         // document — la comparaison au texte de référence ne l'a pas rendue muette.

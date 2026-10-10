@@ -2,8 +2,10 @@
 //! Noyau Rust de MMdedit : état du document, accès disque et traitements de texte.
 pub mod document;
 pub mod edition;
+pub mod http;
 pub mod pont_edition;
 pub mod pont_presse_papier;
 pub mod presse_papier;
 pub mod socle;
 pub mod texte;
+pub mod version;

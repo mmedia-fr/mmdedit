@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 # MMdedit — noyau Rust (core/), interface Qt 6 / QML.
 cmake_minimum_required(VERSION 3.24)
-project(mmdedit VERSION 0.4.6 LANGUAGES CXX)
+project(mmdedit VERSION 0.4.7 LANGUAGES CXX)
 
 if(CMAKE_CXX_COMPILER_ID STREQUAL "MSVC")
   set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreadedDLL")
@@ -83,6 +83,14 @@ if(NOT ANDROID)
 endif()
 target_link_libraries(mmdedit PRIVATE mmdedit_qml_module Qt::Quick Qt::QuickControls2
                                       Qt::QuickDialogs2 Qt::LabsSettings)
+
+# Le vérificateur de certificats de la plateforme (avis de nouvelle version)
+# s'appuie sur le Security Framework sous macOS : sans ces deux bibliothèques,
+# l'édition de liens s'arrête sur « _AuthorizationCreate, symbol(s) not found ».
+# Même correctif que MMail.
+if(APPLE)
+  target_link_libraries(mmdedit PRIVATE "-framework Security" "-framework CoreFoundation")
+endif()
 target_compile_definitions(mmdedit PRIVATE MMDEDIT_VERSION="${PROJECT_VERSION}")
 
 set_target_properties(mmdedit PROPERTIES
@@ -98,6 +106,15 @@ set_target_properties(mmdedit PROPERTIES
 
 if(NOT ANDROID)
   qt_import_qml_plugins(mmdedit)
+endif()
+
+# L'avis de nouvelle version parle au réseau par le noyau Rust, et non par Qt
+# Network : rien ne garantit que la permission soit déduite des modules liés.
+# Elle est donc déclarée ici, comme dans MMail (commande apparue avec Qt 6.8,
+# celui de la fabrication Android).
+if(ANDROID AND COMMAND qt_add_android_permission)
+  qt_add_android_permission(mmdedit NAME android.permission.INTERNET)
+  qt_add_android_permission(mmdedit NAME android.permission.ACCESS_NETWORK_STATE)
 endif()
 
 if(NOT ANDROID)
