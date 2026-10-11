@@ -79,8 +79,9 @@ L'aperçu reste rouvrable à la main par le menu *Affichage*.
 - **Copier / Couper / Coller suivent la vue qui a le focus.** L'aperçu étant en
   lecture seule, seul *Copier* y agit.
 - **Apparence au choix** (*Affichage > Apparence*), appliquée à chaud et
-  mémorisée : **Classique (Windows 9x)**, **Moderne** (M-Media), ou **Système**,
-  qui reprend la palette du bureau. Les contrôles sont dessinés par le style
+  mémorisée : **Classique (Windows 9x)**, **Moderne** (M-Media), **Système**,
+  qui reprend la palette du bureau, ou **MMEDIA**, aux couleurs du site
+  mmedia.fr — la même que dans MMail. Les contrôles sont dessinés par le style
   Fusion de Qt sur toutes les plateformes.
 - **Réglages conservés d'une session à l'autre** : géométrie de la fenêtre,
   copie automatique, apparence, niveau de zoom.
