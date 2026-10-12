@@ -20,7 +20,7 @@ ApplicationWindow {
     visible: true
     title: (modifie ? "*" : "") + doc.nom + " — MMdedit"
 
-    // Apparence courante : « classique », « moderne » ou « systeme ».
+    // Apparence courante : « classique », « moderne », « mmedia » ou « systeme ».
     //
     // Les trois jeux reprennent ceux de la version PySide6, qui les posait par
     // feuille de style Qt (QSS) — sans équivalent en QML. Ici, c'est la palette
@@ -43,11 +43,28 @@ ApplicationWindow {
             bouton: "#ffffff", surbrillance: "#21abe3", texteSurbrillance: "#ffffff",
             police: "Segoe UI", taille: 10, mono: "Cascadia Mono", tailleMono: 11
         },
-        "systeme": { libelle: qsTr("Système (aspect natif)") }
+        "systeme": { libelle: qsTr("Système (aspect natif)") },
+        // Charte du site mmedia.fr, la même que dans MMail. La sélection prend
+        // le cyan foncé, lisible sous du texte blanc comme en texte sur fond
+        // blanc (5,5:1), là où le cyan du site n'atteint pas 2,6:1. Au-delà de
+        // la palette, les repères de marque : bandeau de l'en-tête, accent
+        // cyan, rubriques en bleu pétrole, alerte au rouge du logo, titres en
+        // capitales étroites.
+        "mmedia": {
+            libelle: qsTr("MMEDIA"),
+            fond: "#f1f2f2", texte: "#231f20", base: "#ffffff",
+            bouton: "#ffffff", surbrillance: "#0e6f9e", texteSurbrillance: "#ffffff",
+            police: "Segoe UI", taille: 10, mono: "Cascadia Mono", tailleMono: 11,
+            bandeau: "#0b0d2e", texteBandeau: "#ffffff", accent: "#21abe3",
+            rubrique: "#276e8b", alerte: "#e61e29", titres: "Saira Condensed"
+        }
     })
 
-    // Nul pour « systeme » : c'est ce qui coupe les surcharges ci-dessous.
-    readonly property var jeu: apparence === "systeme" ? null : jeuxApparence[apparence]
+    // Nul pour « systeme » : c'est ce qui coupe les surcharges ci-dessous. Nul
+    // aussi pour un nom inconnu, celui qu'une version plus récente aurait
+    // enregistré : la palette du bureau, plutôt qu'une palette vide.
+    readonly property var jeu: apparence === "systeme" || !jeuxApparence[apparence]
+                               ? null : jeuxApparence[apparence]
 
     // Surcharges conditionnelles plutôt qu'affectations directes : quand « when »
     // redevient faux, RestoreBindingOrValue rend la valeur d'origine — c'est ce
@@ -298,7 +315,7 @@ ApplicationWindow {
     // Une apparence par entrée de menu, exclusives entre elles.
     Instantiator {
         id: actionsApparence
-        model: ["classique", "moderne", "systeme"]
+        model: ["classique", "moderne", "systeme", "mmedia"]
         delegate: Action {
             required property string modelData
             text: fenetre.jeuxApparence[modelData].libelle
@@ -1305,6 +1322,9 @@ ApplicationWindow {
         verifier("apparence classique", palette.window.toString(), "#d4d0c8")
         choisirApparence("moderne")
         verifier("apparence moderne", palette.window.toString(), "#f6f7f8")
+        choisirApparence("mmedia")
+        verifier("apparence MMEDIA", palette.window.toString(), "#f1f2f2")
+        verifier("sélection MMEDIA", palette.highlight.toString(), "#0e6f9e")
         choisirApparence("systeme")
         verifier("apparence systeme", palette.window.toString(), fondSysteme.toString())
 
