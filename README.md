@@ -81,7 +81,8 @@ L'aperçu reste rouvrable à la main par le menu *Affichage*.
 - **Apparence au choix** (*Affichage > Apparence*), appliquée à chaud et
   mémorisée : **Classique (Windows 9x)**, **Moderne** (M-Media), **Système**,
   qui reprend la palette du bureau, ou **MMEDIA**, aux couleurs du site
-  mmedia.fr — la même que dans MMail. Les contrôles sont dessinés par le style
+  mmedia.fr — la même que dans MMail : menus et barre de mise en forme sur un
+  bandeau nuit, sélection en cyan pâle. Les contrôles sont dessinés par le style
   Fusion de Qt sur toutes les plateformes.
 - **Réglages conservés d'une session à l'autre** : géométrie de la fenêtre,
   copie automatique, apparence, niveau de zoom.
@@ -242,7 +243,7 @@ QT_QPA_PLATFORM=offscreen ctest --test-dir _build --output-on-failure  # fumée
 
 Le test de fumée (`mmdedit --smoke`) exerce une vraie fenêtre sans écran :
 encadrement, bascules, annulation, recherche, remplacement, copie automatique
-et sa protection, les trois apparences, puis relit le PDF produit.
+et sa protection, les apparences, puis relit le PDF produit.
 `mmdedit --capture fichier.png` rend la fenêtre en image ; avec
 `MMDEDIT_AVIS_ESSAI=9.9.9`, le bandeau de nouvelle version y paraît sans rien
 demander à GitHub.
