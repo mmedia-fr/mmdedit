@@ -44,19 +44,20 @@ ApplicationWindow {
             police: "Segoe UI", taille: 10, mono: "Cascadia Mono", tailleMono: 11
         },
         "systeme": { libelle: qsTr("Système (aspect natif)") },
-        // Charte du site mmedia.fr, la même que dans MMail. La sélection prend
-        // le cyan foncé, lisible sous du texte blanc comme en texte sur fond
-        // blanc (5,5:1), là où le cyan du site n'atteint pas 2,6:1. Au-delà de
-        // la palette, les repères de marque : bandeau de l'en-tête, accent
-        // cyan, rubriques en bleu pétrole, alerte au rouge du logo, titres en
-        // capitales étroites.
+        // Charte du site mmedia.fr, la même que dans MMail : sélection en cyan
+        // pâle, texte nuit dessus ; « texteAccent », le cyan foncé, pour du
+        // texte mis en valeur sur fond blanc (5,5:1, là où le cyan du site
+        // n'atteint pas 2,6:1). Au-delà de la palette, les repères de marque
+        // (cf. « marque ») : bandeau de l'en-tête, accent cyan, rubriques en
+        // bleu pétrole, alerte au rouge du logo, titres en capitales étroites.
         "mmedia": {
             libelle: qsTr("MMEDIA"),
             fond: "#f1f2f2", texte: "#231f20", base: "#ffffff",
-            bouton: "#ffffff", surbrillance: "#0e6f9e", texteSurbrillance: "#ffffff",
+            bouton: "#ffffff", surbrillance: "#d6eefa", texteSurbrillance: "#0b0d2e",
             police: "Segoe UI", taille: 10, mono: "Cascadia Mono", tailleMono: 11,
             bandeau: "#0b0d2e", texteBandeau: "#ffffff", accent: "#21abe3",
-            rubrique: "#276e8b", alerte: "#e61e29", titres: "Saira Condensed"
+            texteAccent: "#0e6f9e", rubrique: "#276e8b", alerte: "#e61e29",
+            titres: "Saira Condensed"
         }
     })
 
@@ -65,6 +66,44 @@ ApplicationWindow {
     // enregistré : la palette du bureau, plutôt qu'une palette vide.
     readonly property var jeu: apparence === "systeme" || !jeuxApparence[apparence]
                                ? null : jeuxApparence[apparence]
+
+    // Repères de marque : nul hors d'une apparence qui porte un bandeau, et
+    // les autres apparences restent alors telles quelles.
+    readonly property var marque: jeu && jeu.bandeau ? jeu : null
+    // Police des titres, si elle est installée ; sinon celle de la fenêtre.
+    readonly property string policeTitres: marque && Qt.fontFamilies().indexOf(marque.titres) >= 0
+                                           ? marque.titres : font.family
+
+    // Surcharge qui ne vaut que sous une apparence de marque : hors d'elle,
+    // la propriété retrouve sa valeur d'origine, celle du style.
+    component SiMarque: Binding {
+        when: fenetre.marque !== null
+        restoreMode: Binding.RestoreBindingOrValue
+    }
+
+    // Bouton de la barre de mise en forme. Sous une apparence de marque, texte
+    // blanc sur le bandeau, pastille claire au survol ; ailleurs, le bouton
+    // d'outil du style, intact.
+    component BoutonEntete: ToolButton {
+        id: be
+        Rectangle {
+            visible: fenetre.marque !== null
+            z: -1
+            anchors.fill: parent
+            anchors.topMargin: 2
+            anchors.bottomMargin: 2
+            radius: height / 2
+            color: be.down ? Qt.rgba(1, 1, 1, 0.24) : be.hovered ? Qt.rgba(1, 1, 1, 0.14) : "transparent"
+        }
+        SiMarque { target: be.background; property: "visible"; value: false }
+        SiMarque {
+            target: be.contentItem
+            property: "color"
+            value: fenetre.marque ? fenetre.marque.texteBandeau : "black"
+        }
+        SiMarque { target: be; property: "leftPadding"; value: 8 }
+        SiMarque { target: be; property: "rightPadding"; value: 8 }
+    }
 
     // Surcharges conditionnelles plutôt qu'affectations directes : quand « when »
     // redevient faux, RestoreBindingOrValue rend la valeur d'origine — c'est ce
@@ -362,6 +401,27 @@ ApplicationWindow {
     }
 
     menuBar: MenuBar {
+        id: barreMenus
+        // Sous une apparence de marque, les menus sur le bandeau, en blanc ;
+        // l'entrée ouverte sur la sélection pâle, en texte nuit.
+        Rectangle {
+            parent: barreMenus
+            visible: fenetre.marque !== null
+            z: -1
+            anchors.fill: parent
+            color: fenetre.marque ? fenetre.marque.bandeau : "transparent"
+        }
+        SiMarque { target: barreMenus.background; property: "visible"; value: false }
+        delegate: MenuBarItem {
+            id: entreeMenu
+            SiMarque {
+                target: entreeMenu.contentItem
+                property: "color"
+                value: !fenetre.marque ? "black"
+                       : entreeMenu.highlighted || entreeMenu.down ? fenetre.palette.highlightedText
+                       : fenetre.marque.texteBandeau
+            }
+        }
         Menu {
             title: qsTr("&Fichier")
             MenuItem { action: actNouveau }
@@ -415,11 +475,59 @@ ApplicationWindow {
     // Chaque bouton est une bascule : recliquer retire le style posé, et passer
     // d'un niveau de titre à un autre remplace le précédent (cf. core/edition.rs).
     header: ToolBar {
+        id: entete
+        // Sous une apparence de marque : le bandeau prolonge celui des menus,
+        // filet cyan dessous qui s'éteint vers la droite, comme sur le site.
+        Rectangle {
+            parent: entete
+            visible: fenetre.marque !== null
+            z: -1
+            anchors.fill: parent
+            color: fenetre.marque ? fenetre.marque.bandeau : "transparent"
+            Rectangle {
+                anchors.left: parent.left
+                anchors.right: parent.right
+                anchors.bottom: parent.bottom
+                height: 3
+                gradient: Gradient {
+                    orientation: Gradient.Horizontal
+                    GradientStop { position: 0.0; color: fenetre.marque ? fenetre.marque.accent : "transparent" }
+                    GradientStop { position: 0.7; color: fenetre.marque ? fenetre.marque.accent : "transparent" }
+                    GradientStop { position: 1.0; color: "transparent" }
+                }
+            }
+        }
+        SiMarque { target: entete.background; property: "visible"; value: false }
+        SiMarque { target: entete; property: "topPadding"; value: 2 }
+        SiMarque { target: entete; property: "bottomPadding"; value: 6 }
+
         RowLayout {
             anchors.fill: parent
             anchors.leftMargin: 4
             anchors.rightMargin: 4
             spacing: 2
+
+            // Le signe et le nom du logiciel, en tête du bandeau.
+            Image {
+                visible: fenetre.marque !== null && status === Image.Ready
+                source: Qt.platform.os === "android" ? "" : "qrc:/assets/mmdedit.png"
+                sourceSize.height: 26
+                fillMode: Image.PreserveAspectFit
+                smooth: true
+                Layout.preferredHeight: 26
+                Layout.preferredWidth: 26
+                Layout.leftMargin: 6
+            }
+            Label {
+                visible: fenetre.marque !== null
+                text: "MMdedit"
+                color: fenetre.marque ? fenetre.marque.texteBandeau : fenetre.palette.windowText
+                font.family: fenetre.policeTitres
+                font.weight: Font.DemiBold
+                font.pointSize: (fenetre.font.pointSize > 0 ? fenetre.font.pointSize : 10) * 1.4
+                Layout.leftMargin: 4
+                Layout.rightMargin: 14
+            }
 
             Repeater {
                 model: [
@@ -428,7 +536,7 @@ ApplicationWindow {
                     { texte: qsTr("Barré"), aide: qsTr("Barré — ~~texte~~"), marqueur: "~~" },
                     { texte: qsTr("Code"), aide: qsTr("Code en ligne — `texte`"), marqueur: "`" }
                 ]
-                ToolButton {
+                BoutonEntete {
                     text: modelData.texte
                     ToolTip.text: modelData.aide
                     ToolTip.visible: hovered
@@ -436,7 +544,12 @@ ApplicationWindow {
                     onClicked: fenetre.encadrer(modelData.marqueur)
                 }
             }
-            ToolSeparator {}
+            // Sur le bandeau, le trait clair du séparateur se lit comme un
+            // caractère : seul l'écart reste.
+            ToolSeparator {
+                id: separateur
+                SiMarque { target: separateur; property: "opacity"; value: 0 }
+            }
             Repeater {
                 model: [
                     { texte: qsTr("Titre 1"), aide: qsTr("Titre de niveau 1 — # texte"), prefixe: "# " },
@@ -446,7 +559,7 @@ ApplicationWindow {
                     { texte: qsTr("Numérotée"), aide: qsTr("Liste numérotée — 1. élément"), prefixe: "1. " },
                     { texte: qsTr("Citation"), aide: qsTr("Citation — > texte"), prefixe: "> " }
                 ]
-                ToolButton {
+                BoutonEntete {
                     text: modelData.texte
                     ToolTip.text: modelData.aide
                     ToolTip.visible: hovered
@@ -454,15 +567,18 @@ ApplicationWindow {
                     onClicked: fenetre.prefixer(modelData.prefixe)
                 }
             }
-            ToolSeparator {}
-            ToolButton {
+            ToolSeparator {
+                id: separateur2
+                SiMarque { target: separateur2; property: "opacity"; value: 0 }
+            }
+            BoutonEntete {
                 text: qsTr("Lien")
                 ToolTip.text: qsTr("Insérer un lien — [texte](url)")
                 ToolTip.visible: hovered
                 ToolTip.delay: 600
                 onClicked: fenetre.entourer("[", "](https://)")
             }
-            ToolButton {
+            BoutonEntete {
                 text: qsTr("Image")
                 ToolTip.text: qsTr("Insérer une image — ![texte](chemin)")
                 ToolTip.visible: hovered
@@ -1324,7 +1440,12 @@ ApplicationWindow {
         verifier("apparence moderne", palette.window.toString(), "#f6f7f8")
         choisirApparence("mmedia")
         verifier("apparence MMEDIA", palette.window.toString(), "#f1f2f2")
-        verifier("sélection MMEDIA", palette.highlight.toString(), "#0e6f9e")
+        verifier("sélection MMEDIA", palette.highlight.toString(), "#d6eefa")
+        // Les repères de marque sont lus : le bandeau remplace le fond du
+        // style, puis le style revient en quittant l'apparence.
+        verifier("bandeau MMEDIA", entete.background.visible, false)
+        choisirApparence("moderne")
+        verifier("bandeau rendu", entete.background.visible, true)
         choisirApparence("systeme")
         verifier("apparence systeme", palette.window.toString(), fondSysteme.toString())
 
