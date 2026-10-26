@@ -39,25 +39,6 @@ if ! unzip -l "$apk" | grep -qE 'META-INF/.*\.(RSA|EC|DSA)'; then
 fi
 
 adb install -r "$apk"
-
-# Icône du lanceur (0.4.11) : la liste des applications, où MMdedit figure, part
-# avec le journal. Sans effet sur le résultat de l'essai. L'écran est d'abord
-# rallumé et déverrouillé : sans cela, la capture est noire.
-adb shell input keyevent KEYCODE_WAKEUP || true
-sleep 2
-adb shell wm dismiss-keyguard || true
-adb shell input keyevent KEYCODE_HOME || true
-sleep 5
-taille=$(adb shell wm size | tr -d '\r' | sed -n 's/.*: \([0-9]*\)x\([0-9]*\)$/\1 \2/p' | tail -n 1 || true)
-if [ -n "$taille" ]; then
-  set -- $taille
-  adb shell input swipe $(($1 / 2)) $(($2 * 85 / 100)) $(($1 / 2)) $(($2 / 5)) 400 || true
-  sleep 3
-  adb exec-out screencap -p > lanceur-applications.png || true
-  adb shell input keyevent KEYCODE_HOME || true
-  sleep 2
-fi
-
 adb logcat -c
 adb shell monkey -p "$PAQUET" -c android.intent.category.LAUNCHER 1
 sleep "$ATTENTE"

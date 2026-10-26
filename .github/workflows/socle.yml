@@ -412,16 +412,12 @@ jobs:
           disable-animations: true
           # Une seule ligne : l'action exécute chaque ligne dans un shell distinct.
           script: bash packaging/essai-android.sh
-      # Toujours déposé : la capture de la liste des applications (icône du
-      # lanceur) se regarde aussi quand l'essai passe.
       - name: Journal de l'émulateur
-        if: matrix.emulateur && always()
+        if: matrix.emulateur && failure()
         uses: actions/upload-artifact@v4
         with:
           name: mmdedit-android-logcat
-          path: |
-            logcat.txt
-            lanceur-*.png
+          path: logcat.txt
           if-no-files-found: ignore
       - name: Dépôt de l'APK
         if: matrix.abi == 'arm64_v8a'
