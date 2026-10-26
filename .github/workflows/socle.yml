@@ -109,6 +109,19 @@ jobs:
           ./dist/MMdedit/MMdedit.exe --smoke "Réunion été.md"
         env:
           QT_QPA_PLATFORM: offscreen
+      - name: Contrôle Windows — icône de l'exécutable
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          # L'icône que l'explorateur affiche (ressource de build/mmdedit.rc) : sans
+          # elle, Windows rend son icône générique, sans rouge. Le centre de l'icône
+          # de MMdedit est le creux du M, rouge.
+          Add-Type -AssemblyName System.Drawing
+          $icone = [System.Drawing.Icon]::ExtractAssociatedIcon((Resolve-Path dist\MMdedit\MMdedit.exe))
+          $image = $icone.ToBitmap()
+          $c = $image.GetPixel([int]($image.Width / 2), [int]($image.Height / 2))
+          Write-Host "icône $($image.Width)x$($image.Height), centre R=$($c.R) V=$($c.G) B=$($c.B)"
+          if ($c.R -lt 180 -or $c.G -gt 120) { throw "l'exécutable ne porte pas l'icône de MMdedit" }
       - name: Contrôle Windows — chemin absolu accentué, lancé par PowerShell
         if: runner.os == 'Windows'
         shell: pwsh
@@ -243,11 +256,16 @@ jobs:
           cmake --install _build --prefix AppDir/usr
           install -Dm644 packaging/mmdedit.desktop AppDir/usr/share/applications/mmdedit.desktop
           # linuxdeploy veut une icône PNG : elle est versionnée à côté du .ico,
-          # extraite une fois pour toutes de celui-ci. ImageMagick n'est plus
-          # installé sur les runners ubuntu récents, et une dépendance de plus à la
-          # fabrication pour convertir une image ne se justifie pas.
+          # réduite une fois pour toutes, avec les autres tailles du bureau
+          # (packaging/icones). ImageMagick n'est plus installé sur les runners
+          # ubuntu récents, et une dépendance de plus à la fabrication pour
+          # convertir une image ne se justifie pas.
           install -Dm644 assets/mmdedit.png \
             AppDir/usr/share/icons/hicolor/256x256/apps/mmdedit.png
+          for t in 16 24 32 48 64 128 512; do
+            install -Dm644 "packaging/icones/mmdedit-$t.png" \
+              "AppDir/usr/share/icons/hicolor/${t}x${t}/apps/mmdedit.png"
+          done
           base=https://github.com/linuxdeploy
           curl -sSL -o linuxdeploy.AppImage \
             "$base/linuxdeploy/releases/download/continuous/linuxdeploy-x86_64.AppImage"
@@ -374,6 +392,15 @@ jobs:
             -DQT_HOST_PATH="$HOST"
       - name: Construction APK
         run: cmake --build _build --target apk
+      - name: Icône de l'APK
+        shell: bash
+        run: |
+          # Le manifeste de packaging/android désigne l'icône du lanceur : sans lui,
+          # l'APK n'en a aucune et Android affiche son icône générique.
+          apk=$(find _build/android-build -name '*.apk' | head -n 1)
+          aapt2=$(ls -d "$ANDROID_SDK_ROOT"/build-tools/* | sort -V | tail -n 1)/aapt2
+          "$aapt2" dump badging "$apk" | grep -E "^application(-icon-[0-9]+)?:" | tee badging.txt
+          grep -q "icon='res/" badging.txt || { echo "l'APK n'a pas d'icône" >&2; exit 1; }
       - name: Lancement sur émulateur
         if: matrix.emulateur
         uses: reactivecircus/android-emulator-runner@v2
@@ -385,12 +412,16 @@ jobs:
           disable-animations: true
           # Une seule ligne : l'action exécute chaque ligne dans un shell distinct.
           script: bash packaging/essai-android.sh
+      # Toujours déposé : la capture de la liste des applications (icône du
+      # lanceur) se regarde aussi quand l'essai passe.
       - name: Journal de l'émulateur
-        if: matrix.emulateur && failure()
+        if: matrix.emulateur && always()
         uses: actions/upload-artifact@v4
         with:
           name: mmdedit-android-logcat
-          path: logcat.txt
+          path: |
+            logcat.txt
+            lanceur-*.png
           if-no-files-found: ignore
       - name: Dépôt de l'APK
         if: matrix.abi == 'arm64_v8a'

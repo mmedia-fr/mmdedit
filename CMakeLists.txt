@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 # MMdedit — noyau Rust (core/), interface Qt 6 / QML.
 cmake_minimum_required(VERSION 3.24)
-project(mmdedit VERSION 0.4.10 LANGUAGES CXX)
+project(mmdedit VERSION 0.4.11 LANGUAGES CXX)
 
 if(CMAKE_CXX_COMPILER_ID STREQUAL "MSVC")
   set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreadedDLL")
@@ -103,7 +103,9 @@ set_target_properties(mmdedit PROPERTIES
   MACOSX_BUNDLE_SHORT_VERSION_STRING ${PROJECT_VERSION}
   QT_ANDROID_PACKAGE_NAME fr.mmedia.mmdedit
   QT_ANDROID_APP_NAME MMdedit
-  QT_ANDROID_VERSION_NAME ${PROJECT_VERSION})
+  QT_ANDROID_VERSION_NAME ${PROJECT_VERSION}
+  # Manifeste et icône du lanceur (cf. packaging/android/AndroidManifest.xml).
+  QT_ANDROID_PACKAGE_SOURCE_DIR ${CMAKE_CURRENT_SOURCE_DIR}/packaging/android)
 
 if(NOT ANDROID)
   qt_import_qml_plugins(mmdedit)
