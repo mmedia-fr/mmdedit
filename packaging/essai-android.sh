@@ -41,9 +41,13 @@ fi
 adb install -r "$apk"
 
 # Icône du lanceur (0.4.11) : la liste des applications, où MMdedit figure, part
-# avec le journal. Sans effet sur le résultat de l'essai.
+# avec le journal. Sans effet sur le résultat de l'essai. L'écran est d'abord
+# rallumé et déverrouillé : sans cela, la capture est noire.
+adb shell input keyevent KEYCODE_WAKEUP || true
+sleep 2
+adb shell wm dismiss-keyguard || true
 adb shell input keyevent KEYCODE_HOME || true
-sleep 3
+sleep 5
 taille=$(adb shell wm size | tr -d '\r' | sed -n 's/.*: \([0-9]*\)x\([0-9]*\)$/\1 \2/p' | tail -n 1 || true)
 if [ -n "$taille" ]; then
   set -- $taille
