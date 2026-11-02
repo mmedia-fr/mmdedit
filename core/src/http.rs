@@ -276,7 +276,7 @@ pub fn telecharger(
 }
 
 /// Configuration TLS du bureau : le vérificateur de la plateforme, qui lit le
-/// magasin de certificats du système (Windows, Linux, macOS).
+/// magasin de certificats du système (Windows, Linux).
 #[cfg(not(target_os = "android"))]
 fn configuration_tls() -> Resultat<rustls::ClientConfig> {
     use rustls_platform_verifier::ConfigVerifierExt;

@@ -3,6 +3,11 @@
 cmake_minimum_required(VERSION 3.24)
 project(mmdedit VERSION 0.4.11 LANGUAGES CXX)
 
+# Ni macOS ni iOS (décision du 2026-11-02, motif au README).
+if(APPLE)
+  message(FATAL_ERROR "MMdedit ne se construit pas pour les systèmes d'Apple (cf. README).")
+endif()
+
 if(CMAKE_CXX_COMPILER_ID STREQUAL "MSVC")
   set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreadedDLL")
 endif()
@@ -85,22 +90,10 @@ endif()
 target_link_libraries(mmdedit PRIVATE mmdedit_qml_module Qt::Quick Qt::QuickControls2
                                       Qt::QuickDialogs2 Qt::LabsSettings)
 
-# Le vérificateur de certificats de la plateforme (avis de nouvelle version)
-# s'appuie sur le Security Framework sous macOS : sans ces deux bibliothèques,
-# l'édition de liens s'arrête sur « _AuthorizationCreate, symbol(s) not found ».
-# Même correctif que MMail.
-if(APPLE)
-  target_link_libraries(mmdedit PRIVATE "-framework Security" "-framework CoreFoundation")
-endif()
 target_compile_definitions(mmdedit PRIVATE MMDEDIT_VERSION="${PROJECT_VERSION}")
 
 set_target_properties(mmdedit PROPERTIES
   WIN32_EXECUTABLE ON
-  MACOSX_BUNDLE ON
-  MACOSX_BUNDLE_GUI_IDENTIFIER fr.mmedia.mmdedit
-  MACOSX_BUNDLE_BUNDLE_NAME MMdedit
-  MACOSX_BUNDLE_BUNDLE_VERSION ${PROJECT_VERSION}
-  MACOSX_BUNDLE_SHORT_VERSION_STRING ${PROJECT_VERSION}
   QT_ANDROID_PACKAGE_NAME fr.mmedia.mmdedit
   QT_ANDROID_APP_NAME MMdedit
   QT_ANDROID_VERSION_NAME ${PROJECT_VERSION}

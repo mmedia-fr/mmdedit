@@ -113,8 +113,11 @@ Chaque version est publiée en **release GitHub**, avec ses sources :
 | Linux | `MMdedit-<version>-x86_64.AppImage` |
 | Android | `MMdedit-<version>-android-arm64.apk` |
 
-macOS est construit et contrôlé en intégration continue, par portabilité du
-code, mais n'est pas distribué.
+**Ni macOS ni iOS.** Les systèmes d'Apple ne sont pas des cibles de MMdedit, et
+leur prise en charge est retirée du code et de l'intégration continue depuis le
+02/11/2026 : la distribution par l'App Store est incompatible avec la licence
+GPL, et une distribution hors de l'App Store passe par une démarche lourde et
+payante (signature et notarisation par un compte de développeur Apple).
 
 ### Avis de nouvelle version et mise à jour
 
