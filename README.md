@@ -114,10 +114,10 @@ Chaque version est publiée en **release GitHub**, avec ses sources :
 | Android | `MMdedit-<version>-android-arm64.apk` |
 
 **Ni macOS ni iOS.** Les systèmes d'Apple ne sont pas des cibles de MMdedit, et
-l'intégration continue n'en construit plus depuis le 02/11/2026 : la
-distribution par l'App Store est incompatible avec la licence GPL, et une
-distribution hors de l'App Store passe par une démarche lourde et payante
-(signature et notarisation par un compte de développeur Apple).
+leur prise en charge est retirée du code et de l'intégration continue depuis le
+02/11/2026 : la distribution par l'App Store est incompatible avec la licence
+GPL, et une distribution hors de l'App Store passe par une démarche lourde et
+payante (signature et notarisation par un compte de développeur Apple).
 
 ### Avis de nouvelle version et mise à jour
 

@@ -610,7 +610,7 @@ ApplicationWindow {
     // ------------------------------------------------------- nouvelle version
     // Proposée jusqu'à un choix ; puis son téléchargement, et l'invitation à
     // redémarrer pour « Maintenant ». Là où rien ne s'installe seul (Android,
-    // macOS, programme compilé sur place), « Télécharger » ouvre la page de la
+    // programme compilé sur place), « Télécharger » ouvre la page de la
     // publication, comme en 0.4.7.
     Rectangle {
         id: bandeauVersion

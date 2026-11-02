@@ -23,7 +23,7 @@
 // renommage — les MMdedit encore ouverts gardent l'ancien ; ne reste ici que la
 // relance.
 //
-// Ailleurs — Android, macOS, programme compilé sur place — rien ne s'installe
+// Ailleurs — Android, programme compilé sur place — rien ne s'installe
 // seul : la page de la version s'ouvre.
 #pragma once
 
