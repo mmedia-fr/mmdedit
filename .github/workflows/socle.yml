@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
-# MMdedit (Rust / Qt 6) — fabrication continue : Windows, Linux, Android, et macOS par portabilité.
+# MMdedit (Rust / Qt 6) — fabrication continue : Windows, Linux, Android.
 #
 # Chaque cible se construit, s'éprouve (test de fumée : il exerce l'édition et
 # relit le PDF produit) puis s'empaquette. Le contrôle porte aussi sur le paquet,
@@ -30,7 +30,6 @@ jobs:
           # et Ubuntu 22.04 ; ubuntu-22.04 (glibc 2.35) les couvre.
           - { nom: linux,   os: ubuntu-22.04 }
           - { nom: windows, os: windows-2022 }
-          - { nom: macos,   os: macos-14 }
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
@@ -301,37 +300,6 @@ jobs:
         with:
           name: mmdedit-linux-appimage
           path: dist/*.AppImage
-          if-no-files-found: error
-
-      # ---- macOS : bundle déployé et image disque (non notarisée) ----------
-      - name: Paquet macOS
-        if: runner.os == 'macOS'
-        shell: bash
-        run: |
-          set -euo pipefail
-          version=$(sed -n 's/^project(mmdedit VERSION \([0-9.]*\).*/\1/p' CMakeLists.txt)
-          mkdir -p dist
-          cp -R _build/mmdedit.app dist/MMdedit.app
-          "$QT_ROOT_DIR/bin/macdeployqt" dist/MMdedit.app -qmldir=core/qml
-          # Signature ad hoc : sans elle, macOS refuse un bundle dont les
-          # bibliothèques viennent d'être réécrites par macdeployqt. Elle ne
-          # remplace pas la notarisation, qui attend un compte développeur payant.
-          codesign --force --deep --sign - dist/MMdedit.app
-          hdiutil create -volname "MMdedit $version" -srcfolder dist/MMdedit.app \
-            -ov -format UDZO "dist/MMdedit-$version.dmg"
-          test -f "dist/MMdedit-$version.dmg"
-      - name: Contrôle du paquet macOS
-        if: runner.os == 'macOS'
-        shell: bash
-        run: |
-          printf '# Été\n\nCoût : 12,50 €.\n' > "Réunion été.md"
-          QT_QPA_PLATFORM=offscreen ./dist/MMdedit.app/Contents/MacOS/mmdedit --smoke "Réunion été.md"
-      - name: Dépôt de l'image disque macOS
-        if: runner.os == 'macOS'
-        uses: actions/upload-artifact@v4
-        with:
-          name: mmdedit-macos-dmg
-          path: dist/*.dmg
           if-no-files-found: error
 
   android:
