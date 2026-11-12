@@ -114,6 +114,24 @@ QByteArray zipUnMembre(const QByteArray& nom, const QByteArray& contenu)
   return archive;
 }
 
+// Boucles de liaison QML : la fumée les compte ; un document long et un zoom
+// hors 100 % sont le terreau où elles paraissent (relevé du 10/10 : défaut
+// antérieur au zoom, que le zoom rend visible à chaque facteur différent).
+// Le canal précédent reste en dette : tous les autres messages suivent leur
+// voie, et l'application ordinaire n'installe rien du tout.
+int g_boucles_liaison = 0;
+QtMessageHandler g_canal_precedent = nullptr;
+
+void journalQt(QtMsgType type, const QMessageLogContext& contexte, const QString& message)
+{
+  if (type == QtWarningMsg && message.contains(QLatin1String("Binding loop")))
+    ++g_boucles_liaison;
+  if (g_canal_precedent)
+    g_canal_precedent(type, contexte, message);
+  else
+    qt_message_output(type, contexte, message);
+}
+
 }  // namespace
 
 #include "installeur.h"
@@ -195,6 +213,11 @@ int main(int argc, char* argv[])
     else if (fichier.isEmpty())
       fichier = argument;
   }
+
+  // Le canal de comptage ne vit qu'en fumée : l'application ordinaire garde
+  // ses messages tels quels.
+  if (smoke)
+    g_canal_precedent = qInstallMessageHandler(journalQt);
 
   // Type natif exposé à QML : il donne accès au QTextDocument du TextArea, hors
   // de portée du QML et du noyau Rust. URI distinct de celui du module cxx-qt.
@@ -417,6 +440,43 @@ int main(int argc, char* argv[])
         std::fprintf(stderr, "smoke: l'import bureautique survit a Nouveau : %s\n",
                      etatBureautique.toString().toUtf8().constData());
         QCoreApplication::exit(13);
+        return;
+      }
+      // Boucle de liaison de l'aperçu (étape 7 de la feuille de route du
+      // 12/11) : un document long, rendu avec l'aperçu, puis un zoom hors
+      // 100 % — le terreau relevé le 10/10. Le canal compte les avertisse-
+      // sments « Binding loop » ; un seul y met fin.
+      QString longCorps;
+      for (int i = 0; i < 400; ++i) {
+        longCorps += QStringLiteral("# Chapitre %1\n\n").arg(i + 1);
+        for (int j = 0; j < 4; ++j)
+          longCorps += QStringLiteral("Paragraphe %1 du chapitre %2 ; ")
+                              .arg(j + 1)
+                              .arg(i + 1)
+                      + QStringLiteral("une phrase assez longue pour occuper "
+                                        "plusieurs lignes du volet d'aperçu.\n\n");
+      }
+      QTemporaryFile longMd(QDir::tempPath() + QStringLiteral("/mmdedit-XXXXXX.md"));
+      longMd.open();
+      longMd.write(longCorps.toUtf8());
+      longMd.close();
+      QMetaObject::invokeMethod(racine, "charger",
+                                Q_ARG(QVariant, QUrl::fromLocalFile(longMd.fileName())));
+      for (int i = 0; i < 30; ++i) {
+        QThread::msleep(30);
+        QCoreApplication::processEvents();
+      }
+      QMetaObject::invokeMethod(racine, "reglerZoom", Q_ARG(QVariant, 1.5));
+      for (int i = 0; i < 30; ++i) {
+        QThread::msleep(30);
+        QCoreApplication::processEvents();
+      }
+      std::printf("smoke: boucles de liaison compte=%d\n", g_boucles_liaison);
+      std::fflush(stdout);
+      if (g_boucles_liaison > 0) {
+        std::fprintf(stderr, "smoke: %d boucle(s) de liaison dans l'aperçu\n",
+                     g_boucles_liaison);
+        QCoreApplication::exit(20);
         return;
       }
       QCoreApplication::exit(ecrit && entete ? 0 : 8);
