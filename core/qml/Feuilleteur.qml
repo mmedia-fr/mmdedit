@@ -15,8 +15,10 @@ PdfMultiPageView {
     // de PdfMultiPageView, et c'est par elle que la source ouverte remonte.
     document: interne
 
-    /// Pages chargées du PDF courant.
-    readonly property alias pages: feuilletteur.interne.pageCount
+    /// Pages chargées du PDF courant. Un alias ne traverse qu'un seul
+    /// identifiant : la cible se nommerait « racine.interne.pageCount » et
+    /// se réduit à « interne.pageCount ».
+    readonly property alias pages: interne.pageCount
     /// Cause d'un échec de chargement, en clair : « error » côté QtPdf est
     /// une énumération muette (nombre), pas un message.
     readonly property string erreur: {
