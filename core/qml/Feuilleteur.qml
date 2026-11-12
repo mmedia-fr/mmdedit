@@ -22,7 +22,7 @@ PdfMultiPageView {
     /// Cause d'un échec de chargement, en clair : « error » côté QtPdf est
     /// une énumération muette (nombre), pas un message.
     readonly property string erreur: {
-        switch (feuilletteur.interne.error) {
+        switch (interne.error) {
         case 1: return qsTr("erreur inconnue")
         case 2: return qsTr("données pas encore disponibles")
         case 3: return qsTr("fichier introuvable")
@@ -35,7 +35,7 @@ PdfMultiPageView {
     /// État du document : 0 nul, 1 chargement, 2 prêt, 3 déchargement,
     /// 4 erreur — l'ordre de QPdfDocument::Status, que Main.qml ne nomme
     /// pas sans l'import du module.
-    readonly property int etat: feuilletteur.interne.status
+    readonly property int etat: interne.status
 
     /// Ouvre un PDF ; remplacer l'URL ouvre le nouveau fichier.
     function ouvrir(url) {
