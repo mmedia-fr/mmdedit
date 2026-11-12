@@ -59,6 +59,18 @@ pub mod qobject {
         #[cxx_name = "estMarkdown"]
         fn est_markdown(&self) -> bool;
 
+        /// Vrai si l'URL désigne un PDF : il se feuillette, il ne s'édite pas.
+        #[qinvokable]
+        #[cxx_name = "estPdf"]
+        fn est_pdf(&self, url: &QString) -> bool;
+
+        /// Ouvre un PDF sans en lire le moindre texte : pose chemin, nom et
+        /// format `pdf`, et rend vrai si le fichier existe. Le feuilleteur
+        /// charge le fichier de son côté, hors du noyau.
+        #[qinvokable]
+        #[cxx_name = "ouvrirPdf"]
+        fn ouvrir_pdf(self: Pin<&mut Document>, url: &QString) -> bool;
+
         /// Nom de fichier proposé pour un export PDF, à partir du chemin courant.
         #[qinvokable]
         #[cxx_name = "cheminExport"]
@@ -122,6 +134,13 @@ impl qobject::Document {
 
     pub fn ouvrir(mut self: Pin<&mut Self>, url: &QString) -> QString {
         let chemin = texte::chemin_depuis_url(&url.to_string());
+        // Un PDF se feuillette, il ne se lit pas comme du texte : des octets
+        // binaires y passeraient pour un document illisible de gagné.
+        if texte::format_du_chemin(&chemin) == texte::Format::Pdf {
+            self.as_mut()
+                .set_erreur(QString::from("Un PDF se feuillette ; il ne s'édite pas."));
+            return QString::from("");
+        }
         let octets = match std::fs::read(&chemin) {
             Ok(o) => o,
             Err(e) => {
@@ -161,6 +180,25 @@ impl qobject::Document {
 
     pub fn est_markdown(&self) -> bool {
         self.format().to_string() == texte::Format::Markdown.cle()
+    }
+
+    pub fn est_pdf(&self, url: &QString) -> bool {
+        texte::format_du_chemin(&texte::chemin_depuis_url(&url.to_string())) == texte::Format::Pdf
+    }
+
+    pub fn ouvrir_pdf(mut self: Pin<&mut Self>, url: &QString) -> bool {
+        let chemin = texte::chemin_depuis_url(&url.to_string());
+        if chemin.is_empty() || !std::path::Path::new(&chemin).is_file() {
+            self.as_mut()
+                .set_erreur(QString::from(&format!("Feuilletteur impossible :\n{chemin}")));
+            return false;
+        }
+        self.as_mut().poser_chemin(&chemin);
+        // Aucun texte n'est lu : l'encodage ne se pose pas, et la barre d'état
+        // affiche le libellé du format, « PDF », à sa place.
+        self.as_mut().set_encodage(QString::from(""));
+        self.as_mut().set_erreur(QString::from(""));
+        true
     }
 
     pub fn chemin_export(&self, extension: &QString) -> QString {

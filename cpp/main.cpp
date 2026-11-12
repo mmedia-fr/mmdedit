@@ -5,6 +5,7 @@
 #include <QtCore/QFileInfo>
 #include <QtCore/QSettings>
 #include <QtCore/QTemporaryFile>
+#include <QtCore/QThread>
 #include <QtCore/QString>
 #include <QtCore/QStringList>
 #include <QtCore/QTimer>
@@ -225,6 +226,47 @@ int main(int argc, char* argv[])
       std::printf("smoke: pdf ecrit=%d entete=%d taille=%lld\n", ecrit, entete,
                   static_cast<long long>(QFileInfo(cheminPdf).size()));
       std::fflush(stdout);
+
+      // Feuilleteur (lecture seule) : le PDF tout juste écrit s'y rouvre sans
+      // que le moindre texte soit lu par le noyau, et ses pages arrivent.
+      QVariant ouvert;
+      QMetaObject::invokeMethod(racine, "ouvrirPdf", Q_RETURN_ARG(QVariant, ouvert),
+                                Q_ARG(QVariant, QUrl::fromLocalFile(cheminPdf)));
+      int pages = 0;
+      for (int i = 0; i < 300 && pages <= 0; ++i) {
+        QThread::msleep(10);
+        QCoreApplication::processEvents();
+        if (racine)
+          pages = racine->property("pagesPdf").toInt();
+      }
+      QVariant etatFeuilleteur;
+      QMetaObject::invokeMethod(racine, "controleFeuilleteur",
+                                Q_RETURN_ARG(QVariant, etatFeuilleteur),
+                                Q_ARG(QVariant, false));
+      std::printf("smoke: feuilleteur ouvert=%d pages=%d etat=%s\n", ouvert.toBool(), pages,
+                  etatFeuilleteur.toString().toUtf8().constData());
+      std::fflush(stdout);
+      if (!ouvert.toBool() || pages <= 0 || etatFeuilleteur.toString() != QStringLiteral("ok")) {
+        std::fprintf(stderr, "smoke: le feuilleteur n'a pas ouvert le PDF\n");
+        QCoreApplication::exit(10);
+        return;
+      }
+      // Retour à l'édition : « Nouveau » referme le feuilleteur et rend ses
+      // commandes.
+      QMetaObject::invokeMethod(racine, "nouveau");
+      for (int i = 0; i < 10; ++i) {
+        QThread::msleep(10);
+        QCoreApplication::processEvents();
+      }
+      QMetaObject::invokeMethod(racine, "controleFeuilleteur",
+                                Q_RETURN_ARG(QVariant, etatFeuilleteur),
+                                Q_ARG(QVariant, true));
+      if (etatFeuilleteur.toString() != QStringLiteral("ok")) {
+        std::fprintf(stderr, "smoke: le feuilleteur reste ouvert apres Nouveau : %s\n",
+                     etatFeuilleteur.toString().toUtf8().constData());
+        QCoreApplication::exit(11);
+        return;
+      }
       QCoreApplication::exit(ecrit && entete ? 0 : 8);
     });
   }

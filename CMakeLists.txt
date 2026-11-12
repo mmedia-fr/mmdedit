@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 # MMdedit — noyau Rust (core/), interface Qt 6 / QML.
 cmake_minimum_required(VERSION 3.24)
-project(mmdedit VERSION 0.4.13 LANGUAGES CXX)
+project(mmdedit VERSION 0.4.14 LANGUAGES CXX)
 
 # Ni macOS ni iOS (décision du 2026-11-02, motif au README).
 if(APPLE)
@@ -19,7 +19,7 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 # QuickDialogs2 sert les boîtes Ouvrir / Enregistrer / Message, LabsSettings la
 # persistance de la géométrie de la fenêtre (module QtCore QML à partir de 6.5,
 # que la machine de développement en 6.4 n'a pas).
-find_package(Qt6 6.4 REQUIRED COMPONENTS Core Gui Qml Quick QuickControls2 QuickDialogs2 LabsSettings)
+find_package(Qt6 6.4 REQUIRED COMPONENTS Core Gui Qml Quick QuickControls2 QuickDialogs2 LabsSettings Pdf PdfQuick)
 if(NOT ANDROID)
   find_package(Qt6 REQUIRED COMPONENTS QmlImportScanner)
 endif()
@@ -88,7 +88,7 @@ if(NOT ANDROID)
     FILES assets/mmdedit.ico assets/mmdedit.png)
 endif()
 target_link_libraries(mmdedit PRIVATE mmdedit_qml_module Qt::Quick Qt::QuickControls2
-                                      Qt::QuickDialogs2 Qt::LabsSettings)
+                                      Qt::QuickDialogs2 Qt::LabsSettings Qt::PdfQuick)
 
 target_compile_definitions(mmdedit PRIVATE MMDEDIT_VERSION="${PROJECT_VERSION}")
 

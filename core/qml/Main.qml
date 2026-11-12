@@ -8,6 +8,7 @@ import QtQuick
 import QtQuick.Controls
 import QtQuick.Dialogs
 import QtQuick.Layouts
+import QtQuick.Pdf
 import Qt.labs.settings
 import fr.mmedia.mmdedit
 import fr.mmedia.mmdedit.natif
@@ -88,6 +89,12 @@ ApplicationWindow {
     // La saisie se colore pour le fond de l'apparence : « nuit » porte le jeu
     // sombre, les autres gardent le jeu clair historique.
     readonly property bool colorationSombre: jeu !== null && jeu.sombre === true
+    // Le document ouvert est-il un PDF ? Il se parcourt dans le feuilleteur,
+    // en lecture seule — rien de ce qui touche au texte ne s'y applique.
+    readonly property bool genrePdf: doc.format === "pdf"
+    // Contrôle du feuilleteur : pages chargées du PDF courant — négatif en
+    // erreur, nul tant qu'il charge (le test de fumée le lit).
+    property int pagesPdf: 0
     // Police des titres, si elle est installée ; sinon celle de la fenêtre.
     readonly property string policeTitres: marque && Qt.fontFamilies().indexOf(marque.titres) >= 0
                                            ? marque.titres : font.family
@@ -312,18 +319,21 @@ ApplicationWindow {
     }
     Action {
         id: actEnregistrer
+        enabled: !fenetre.genrePdf
         text: qsTr("&Enregistrer")
         shortcut: StandardKey.Save
         onTriggered: fenetre.enregistrer()
     }
     Action {
         id: actEnregistrerSous
+        enabled: !fenetre.genrePdf
         text: qsTr("Enregistrer &sous…")
         shortcut: StandardKey.SaveAs
         onTriggered: fenetre.enregistrerSous()
     }
     Action {
         id: actExportPdf
+        enabled: !fenetre.genrePdf
         text: qsTr("Exporter en &PDF…")
         onTriggered: {
             dlgPdf.currentFile = doc.cheminExport(".pdf") !== ""
@@ -386,6 +396,7 @@ ApplicationWindow {
     }
     Action {
         id: actRechercher
+        enabled: !fenetre.genrePdf
         text: qsTr("&Rechercher / Remplacer…")
         shortcut: StandardKey.Find
         onTriggered: dlgRecherche.ouvrir()
@@ -788,6 +799,7 @@ ApplicationWindow {
     // ------------------------------------------------------------------- vues
     SplitView {
         id: partage
+        visible: !fenetre.genrePdf
         anchors.top: bandeauVersion.bottom
         anchors.left: parent.left
         anchors.right: parent.right
@@ -892,6 +904,27 @@ ApplicationWindow {
         onTriggered: fenetre.rafraichir()
     }
 
+    // --------------------------------------------------------------- feuilleteur
+    // Un `.pdf` ouvert se feuillette là où s'éditent les textes (étape 5 de la
+    // feuille de route du 12/11) : lecture seule — le noyau n'en lit aucun
+    // texte, et rien ne peut s'enregistrer par-dessus le fichier.
+    PdfDocument {
+        id: documentPdf
+        onStatusChanged: {
+            pagesPdf = status === PdfDocument.Ready ? documentPdf.pageCount
+                    : status === PdfDocument.Error ? -1 : 0
+        }
+    }
+    PdfMultiPageView {
+        id: volet_pdf
+        visible: fenetre.genrePdf
+        anchors.top: bandeauVersion.bottom
+        anchors.left: parent.left
+        anchors.right: parent.right
+        anchors.bottom: parent.bottom
+        document: documentPdf
+    }
+
     // ------------------------------------------------------------- barre d'état
     footer: ToolBar {
         RowLayout {
@@ -973,10 +1006,11 @@ ApplicationWindow {
         id: dlgOuvrir
         title: qsTr("Ouvrir un fichier")
         fileMode: FileDialog.OpenFile
-        // MMdedit ouvre tout fichier texte : ces filtres ne restreignent rien,
-        // ils évitent seulement de chercher à la main dans un dossier chargé.
+        // MMdedit ouvre tout fichier texte, et feuillette les PDF : ces filtres
+        // ne restreignent rien, ils évitent seulement de chercher à la main
+        // dans un dossier chargé.
         nameFilters: [qsTr("Markdown (*.md *.markdown)"), qsTr("Texte (*.txt)"),
-                      qsTr("CSV (*.csv)"),
+                      qsTr("CSV (*.csv)"), qsTr("PDF (*.pdf)"),
                       qsTr("Configuration (*.json *.yaml *.yml *.toml *.ini *.conf *.cfg *.env)"),
                       qsTr("Code et scripts (*.sh *.ps1 *.bat *.cmd *.py *.rs *.js *.ts *.c *.h *.cpp *.sql)"),
                       qsTr("Journaux (*.log *.out *.err *.trace)"),
@@ -1130,7 +1164,13 @@ ApplicationWindow {
         apercu.text = rendu
         largeurRendue = apercu.width
         tailleRendue = apercu.font.pointSize
-        compteurs.text = doc.statistiques(editeur.text)
+        // Un PDF ouvert se compte en pages, non en mots ; en chargement, la
+        // barre d'état le dit, sans compter des pages qui n'y sont pas.
+        compteurs.text = genrePdf
+                ? (pagesPdf > 0 ? qsTr("%n page(s)", "", pagesPdf)
+                  : pagesPdf < 0 ? qsTr("PDF illisible : %1").arg(documentPdf.error)
+                  : qsTr("Chargement du PDF…"))
+                : doc.statistiques(editeur.text)
     }
 
     // Heure en secondes, telle que l'attend la règle du presse-papier.
@@ -1238,9 +1278,16 @@ ApplicationWindow {
     }
 
     function charger(url) {
+        // Un PDF se feuillette, sans passer par la lecture de texte (étape 5
+        // de la feuille de route du 12/11).
+        if (doc.estPdf(url)) {
+            ouvrirPdf(url)
+            return
+        }
         chargementEnCours = true
         var contenu = doc.ouvrir(url)
         if (doc.erreur.length === 0) {
+            documentPdf.source = ""
             editeur.text = contenu
             // Relu sur l'éditeur plutôt que repris du fichier : c'est à ce que
             // porte le TextArea que les frappes seront comparées.
@@ -1252,9 +1299,28 @@ ApplicationWindow {
         rafraichir()
     }
 
+    function ouvrirPdf(url) {
+        if (!doc.ouvrirPdf(url)) {
+            flash(doc.erreur)
+            return false
+        }
+        // Aucun texte lu : le feuilleteur charge le fichier de son côté, et le
+        // document ouvert ne porte que le chemin, le nom et le format.
+        documentPdf.source = url
+        editeur.text = ""
+        texteReference = ""
+        modifie = false
+        actVoirApercu.checked = false
+        actVoirEditeur.checked = true
+        flash(qsTr("« %1 » s'ouvre en lecture seule.").arg(doc.nom))
+        rafraichir()
+        return true
+    }
+
     function nouveau() {
         chargementEnCours = true
         doc.nouveau()
+        documentPdf.source = ""
         editeur.text = ""
         texteReference = ""
         modifie = false
@@ -1522,6 +1588,24 @@ ApplicationWindow {
     // en argument est bien arrivé jusqu'à lui.
     function texteCourant() {
         return editeur.text
+    }
+
+    // Contrôle du feuilleteur : le test de fumée l'appelle une fois le PDF
+    // ouvert (`ferme` faux : vue en place, édition coupée), puis après
+    // « Nouveau » (`ferme` vrai : l'édition est revenue). Rend « ok » ou
+    // l'écart constaté.
+    function controleFeuilleteur(ferme) {
+        var ecarts = []
+        function verifier(quoi, obtenu, attendu) {
+            if (obtenu !== attendu)
+                ecarts.push(quoi + " : « " + obtenu + " » au lieu de « " + attendu + " »")
+        }
+        verifier("genre pdf", genrePdf, !ferme)
+        verifier("feuilleteur visible", volet_pdf.visible, !ferme)
+        verifier("edition visible", partage.visible, ferme)
+        verifier("enregistrer coupe", actEnregistrer.enabled, ferme)
+        verifier("recherche coupee", actRechercher.enabled, ferme)
+        return ecarts.length === 0 ? "ok" : ecarts.join(" ; ")
     }
 
     // Contrôle d'intégration : exerce la chaîne complète — noyau Rust, plan,

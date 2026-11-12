@@ -64,6 +64,9 @@ const EXT_CODE: &[&str] = &[
 /// Journaux : niveaux de gravité et horodatages.
 const EXT_JOURNAL: &[&str] = &["log", "out", "err", "trace"];
 
+/// PDF : feuilletés, pas édités — rien n'en est lu comme du texte.
+const EXT_PDF: &[&str] = &["pdf"];
+
 /// Fichiers reconnus à leur nom, faute d'extension — « .env » n'en a pas, au
 /// sens de la fonction `extension()` ci-dessous, et un Makefile n'en porte pas.
 const NOMS_CONNUS: &[(&str, Format)] = &[
@@ -83,6 +86,7 @@ pub enum Format {
     Donnees,
     Code,
     Journal,
+    Pdf,
     Texte,
 }
 
@@ -95,6 +99,7 @@ impl Format {
             Format::Donnees => "donnees",
             Format::Code => "code",
             Format::Journal => "journal",
+            Format::Pdf => "pdf",
             Format::Texte => "texte",
         }
     }
@@ -107,6 +112,7 @@ impl Format {
             Format::Donnees => "Configuration",
             Format::Code => "Code",
             Format::Journal => "Journal",
+            Format::Pdf => "PDF",
             Format::Texte => "Texte",
         }
     }
@@ -136,6 +142,8 @@ pub fn format_du_chemin(chemin: &str) -> Format {
         Format::Code
     } else if EXT_JOURNAL.contains(&ext.as_str()) {
         Format::Journal
+    } else if EXT_PDF.contains(&ext.as_str()) {
+        Format::Pdf
     } else {
         Format::Texte
     }
@@ -309,6 +317,7 @@ mod tests {
         assert_eq!(format_du_chemin(r"C:\scripts\Inventaire.PS1"), Format::Code);
         assert_eq!(format_du_chemin("/tmp/requete.sql"), Format::Code);
         assert_eq!(format_du_chemin("/var/log/syslog.log"), Format::Journal);
+        assert_eq!(format_du_chemin("/tmp/rapport.pdf"), Format::Pdf);
         // Reconnus à leur nom : ils n'ont pas d'extension.
         assert_eq!(format_du_chemin("/src/Makefile"), Format::Code);
         assert_eq!(format_du_chemin("/src/Dockerfile"), Format::Code);
@@ -325,6 +334,7 @@ mod tests {
             Format::Donnees,
             Format::Code,
             Format::Journal,
+            Format::Pdf,
             Format::Texte,
         ];
         // Les clés partent à QML, qui les compare telles quelles pour choisir la

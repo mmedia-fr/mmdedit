@@ -42,7 +42,7 @@ jobs:
       - uses: jurplel/install-qt-action@v4
         with:
           version: ${{ env.QT_VERSION }}
-          modules: ""
+          modules: qtpdf
           cache: true
       - name: Dépendances Linux
         if: runner.os == 'Linux'
@@ -338,6 +338,7 @@ jobs:
           version: ${{ env.QT_VERSION }}
           host: all_os
           target: android
+          modules: qtpdf
           arch: android_${{ matrix.abi }}
           cache: true
       - uses: actions/setup-java@v4
