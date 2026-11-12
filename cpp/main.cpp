@@ -232,8 +232,12 @@ int main(int argc, char* argv[])
       QVariant ouvert;
       QMetaObject::invokeMethod(racine, "ouvrirPdf", Q_RETURN_ARG(QVariant, ouvert),
                                 Q_ARG(QVariant, QUrl::fromLocalFile(cheminPdf)));
+      // Sous Android, le module QtPdf n'existe pas : le feuilleteur ne s'y
+      // instancie jamais, aucune page n'y peut arriver. Le contrôle attend
+      // alors l'avertissement tenant lieu de vue, pas les pages.
+      const bool avecPages = racine && racine->property("feuilleteurDisponible").toBool();
       int pages = 0;
-      for (int i = 0; i < 300 && pages <= 0; ++i) {
+      for (int i = 0; i < 300 && avecPages && pages <= 0; ++i) {
         QThread::msleep(10);
         QCoreApplication::processEvents();
         if (racine)
@@ -246,8 +250,9 @@ int main(int argc, char* argv[])
       std::printf("smoke: feuilleteur ouvert=%d pages=%d etat=%s\n", ouvert.toBool(), pages,
                   etatFeuilleteur.toString().toUtf8().constData());
       std::fflush(stdout);
-      if (!ouvert.toBool() || pages <= 0 || etatFeuilleteur.toString() != QStringLiteral("ok")) {
-        std::fprintf(stderr, "smoke: le feuilleteur n'a pas ouvert le PDF\n");
+      if (!ouvert.toBool() || (avecPages && pages <= 0)
+          || etatFeuilleteur.toString() != QStringLiteral("ok")) {
+        std::fprintf(stderr, "smoke: le feuilleteur n'a pas ouvert le PDF (pages=%d)\n", pages);
         QCoreApplication::exit(10);
         return;
       }

@@ -19,7 +19,11 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 # QuickDialogs2 sert les boîtes Ouvrir / Enregistrer / Message, LabsSettings la
 # persistance de la géométrie de la fenêtre (module QtCore QML à partir de 6.5,
 # que la machine de développement en 6.4 n'a pas).
-find_package(Qt6 6.4 REQUIRED COMPONENTS Core Gui Qml Quick QuickControls2 QuickDialogs2 LabsSettings Pdf PdfQuick)
+find_package(Qt6 6.4 REQUIRED COMPONENTS Core Gui Qml Quick QuickControls2 QuickDialogs2 LabsSettings)
+# QtPdf n'existe pas sous Android : le module est optionnel, et le feuilleteur
+# visé par l'étape 5 de la feuille de route ne s'y instancie jamais — Main.qml
+# affiche l'avertissement de lecture seule à sa place.
+find_package(Qt6 6.4 QUIET OPTIONAL_COMPONENTS Pdf PdfQuick)
 if(NOT ANDROID)
   find_package(Qt6 REQUIRED COMPONENTS QmlImportScanner)
 endif()
@@ -88,7 +92,10 @@ if(NOT ANDROID)
     FILES assets/mmdedit.ico assets/mmdedit.png)
 endif()
 target_link_libraries(mmdedit PRIVATE mmdedit_qml_module Qt::Quick Qt::QuickControls2
-                                      Qt::QuickDialogs2 Qt::LabsSettings Qt::PdfQuick)
+                                      Qt::QuickDialogs2 Qt::LabsSettings)
+if(TARGET Qt::PdfQuick)
+  target_link_libraries(mmdedit PRIVATE Qt::PdfQuick)
+endif()
 
 target_compile_definitions(mmdedit PRIVATE MMDEDIT_VERSION="${PROJECT_VERSION}")
 
