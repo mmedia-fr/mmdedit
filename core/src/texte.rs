@@ -112,13 +112,14 @@ impl Format {
     }
 }
 
-/// Format déduit d'un chemin. Un document sans chemin est du Markdown.
+/// Format déduit d'un chemin. Un document sans chemin est du texte brut :
+/// c'est celui qu'ouvre MMdedit sans fichier (demande du 12/11).
 ///
 /// Le nom complet est regardé avant l'extension : « .env » et « Makefile » n'en
 /// ont pas, et tomberaient sinon dans le format texte.
 pub fn format_du_chemin(chemin: &str) -> Format {
     if chemin.is_empty() {
-        return Format::Markdown;
+        return Format::Texte;
     }
     let nom = nom_fichier(chemin).to_ascii_lowercase();
     if let Some((_, format)) = NOMS_CONNUS.iter().find(|(connu, _)| *connu == nom) {
@@ -290,7 +291,7 @@ mod tests {
 
     #[test]
     fn format_par_extension() {
-        assert_eq!(format_du_chemin(""), Format::Markdown);
+        assert_eq!(format_du_chemin(""), Format::Texte);
         assert_eq!(format_du_chemin("/tmp/notes.md"), Format::Markdown);
         assert_eq!(format_du_chemin("/tmp/NOTES.MARKDOWN"), Format::Markdown);
         assert_eq!(format_du_chemin(r"C:\x\page.HTML"), Format::Xml);
