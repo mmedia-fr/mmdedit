@@ -3,6 +3,8 @@
 // Colorations syntaxiques de la zone d'édition. Markdown et XML sont portés de
 // src/mmdedit/highlighter.py sans changer les couleurs ni les règles ; les
 // configurations, le code et les journaux s'y sont ajoutés, sur la même palette.
+// Sous une apparence à fond sombre (« nuit »), chaque teinte a son équivalent
+// éclairci — le rôle ne change pas, la teinte suit le fond.
 //
 // QSyntaxHighlighter n'existe pas côté QML : il s'attache au QTextDocument que
 // le TextArea expose par `textDocument`, d'où le passage par du C++.
@@ -37,6 +39,69 @@ inline QTextCharFormat mmdeditFormat(const QString& couleur = QString(), bool gr
   return f;
 }
 
+namespace mmdedit {
+
+/// Rôles colorés : ce qui est mis en valeur, indépendamment de la teinte. Un
+/// même rôle garde sa fonction d'un fond à l'autre — titre, commentaire,
+/// chaîne… — seule la couleur change.
+enum class Role {
+  Titre,        ///< Titre Markdown, section de configuration, mot-clé de code.
+  Code,         ///< Code en ligne Markdown, valeur d'attribut XML, chaîne.
+  Lien,         ///< Lien Markdown.
+  Citation,     ///< Ligne citée Markdown.
+  Puce,         ///< Début d'élément de liste.
+  Filet,        ///< Séparateur horizontal, déclaration XML.
+  Balise,       ///< Balise XML.
+  Attribut,     ///< Attribut XML, variable de script.
+  Valeur,       ///< Valeur d'attribut, chaîne de configuration.
+  Commentaire,  ///< Commentaire — XML, configuration, code.
+  Entite,       ///< Entité XML, nombre et horodatage mis en valeur.
+  Section,      ///< Section d'un fichier INI ou d'une table TOML.
+  Clef,         ///< Clé de configuration.
+  Nombre,       ///< Nombre.
+  Litteral,     ///< Littéral (true, null, none…).
+  Variable,     ///< Variable de shell ou de batch.
+  Horodatage,   ///< Horodatage de journal.
+  Erreur,       ///< Niveau de gravité d'erreur.
+  Alerte,       ///< Niveau de gravité d'alerte.
+  Information,  ///< Niveau de gravité d'information.
+  MiseAuPoint,  ///< Niveau de gravité bas (debug, trace).
+};
+
+/// La teinte d'un rôle sous un fond clair ou sombre. Les teintes claires sont
+/// celles du portage (héritées de la version PySide6) ; les sombres sont leurs
+/// équivalents éclaircis, tenus à 4,5:1 au moins sur le fond `#24272e` que
+/// l'apparence « nuit » donne à la zone d'édition.
+inline QString couleur(Role role, bool sombre)
+{
+  switch (role) {
+  case Role::Titre:       return sombre ? QStringLiteral("#91cbf2") : QStringLiteral("#000080");
+  case Role::Code:        return sombre ? QStringLiteral("#ff9d8f") : QStringLiteral("#8b0000");
+  case Role::Lien:       return sombre ? QStringLiteral("#5cc6f2") : QStringLiteral("#0000cd");
+  case Role::Citation:    return sombre ? QStringLiteral("#a3c98a") : QStringLiteral("#556b2f");
+  case Role::Puce:       return sombre ? QStringLiteral("#d2a8ff") : QStringLiteral("#800080");
+  case Role::Filet:       return sombre ? QStringLiteral("#9aa8b6") : QStringLiteral("#808080");
+  case Role::Balise:      return sombre ? QStringLiteral("#91cbf2") : QStringLiteral("#000080");
+  case Role::Attribut:    return sombre ? QStringLiteral("#d2a8ff") : QStringLiteral("#800080");
+  case Role::Valeur:      return sombre ? QStringLiteral("#ff9d8f") : QStringLiteral("#8b0000");
+  case Role::Commentaire: return sombre ? QStringLiteral("#8ccf8c") : QStringLiteral("#008000");
+  case Role::Entite:      return sombre ? QStringLiteral("#ffb86c") : QStringLiteral("#ff8c00");
+  case Role::Section:     return sombre ? QStringLiteral("#91cbf2") : QStringLiteral("#000080");
+  case Role::Clef:        return sombre ? QStringLiteral("#d2a8ff") : QStringLiteral("#800080");
+  case Role::Nombre:      return sombre ? QStringLiteral("#ffb86c") : QStringLiteral("#ff8c00");
+  case Role::Litteral:    return sombre ? QStringLiteral("#91cbf2") : QStringLiteral("#000080");
+  case Role::Variable:    return sombre ? QStringLiteral("#d2a8ff") : QStringLiteral("#800080");
+  case Role::Horodatage:  return sombre ? QStringLiteral("#9aa8b6") : QStringLiteral("#808080");
+  case Role::Erreur:      return sombre ? QStringLiteral("#ff7b72") : QStringLiteral("#b22222");
+  case Role::Alerte:      return sombre ? QStringLiteral("#ffb86c") : QStringLiteral("#ff8c00");
+  case Role::Information:  return sombre ? QStringLiteral("#91cbf2") : QStringLiteral("#000080");
+  case Role::MiseAuPoint: return sombre ? QStringLiteral("#9aa8b6") : QStringLiteral("#808080");
+  }
+  return QString();
+}
+
+} // namespace mmdedit
+
 /// Règles ligne à ligne, appliquées dans l'ordre : les suivantes recouvrent.
 using ReglesColoration = std::vector<std::pair<QRegularExpression, QTextCharFormat>>;
 
@@ -48,18 +113,18 @@ class ColorateurMarkdown : public QSyntaxHighlighter
 {
   Q_OBJECT
 public:
-  explicit ColorateurMarkdown(QTextDocument* document)
+  explicit ColorateurMarkdown(QTextDocument* document, bool sombre)
     : QSyntaxHighlighter(document)
   {
-    const QTextCharFormat titre = mmdeditFormat(QStringLiteral("#000080"), true);
+    const QTextCharFormat titre = mmdeditFormat(mmdedit::couleur(mmdedit::Role::Titre, sombre), true);
     const QTextCharFormat gras = mmdeditFormat(QString(), true);
     const QTextCharFormat italique = mmdeditFormat(QString(), false, true);
     const QTextCharFormat barre = mmdeditFormat(QString(), false, false, false, true);
-    const QTextCharFormat code = mmdeditFormat(QStringLiteral("#8b0000"), false, false, true);
-    const QTextCharFormat lien = mmdeditFormat(QStringLiteral("#0000cd"));
-    const QTextCharFormat citation = mmdeditFormat(QStringLiteral("#556b2f"), false, true);
-    const QTextCharFormat puce = mmdeditFormat(QStringLiteral("#800080"), true);
-    const QTextCharFormat filet = mmdeditFormat(QStringLiteral("#808080"), true);
+    const QTextCharFormat code = mmdeditFormat(mmdedit::couleur(mmdedit::Role::Code, sombre), false, false, true);
+    const QTextCharFormat lien = mmdeditFormat(mmdedit::couleur(mmdedit::Role::Lien, sombre));
+    const QTextCharFormat citation = mmdeditFormat(mmdedit::couleur(mmdedit::Role::Citation, sombre), false, true);
+    const QTextCharFormat puce = mmdeditFormat(mmdedit::couleur(mmdedit::Role::Puce, sombre), true);
+    const QTextCharFormat filet = mmdeditFormat(mmdedit::couleur(mmdedit::Role::Filet, sombre), true);
 
     m_regles = {
       { QRegularExpression(QStringLiteral("^#{1,6}\\s.*$")), titre },
@@ -101,14 +166,14 @@ class ColorateurXml : public QSyntaxHighlighter
 public:
   enum Etat { EtatNormal = 0, EtatCommentaire = 1, EtatCdata = 2 };
 
-  explicit ColorateurXml(QTextDocument* document)
+  explicit ColorateurXml(QTextDocument* document, bool sombre)
     : QSyntaxHighlighter(document)
-    , m_balise(mmdeditFormat(QStringLiteral("#000080"), true))
-    , m_attribut(mmdeditFormat(QStringLiteral("#800080")))
-    , m_valeur(mmdeditFormat(QStringLiteral("#8b0000")))
-    , m_commentaire(mmdeditFormat(QStringLiteral("#008000"), false, true))
-    , m_entite(mmdeditFormat(QStringLiteral("#ff8c00")))
-    , m_declaration(mmdeditFormat(QStringLiteral("#808080"), true))
+    , m_balise(mmdeditFormat(mmdedit::couleur(mmdedit::Role::Balise, sombre), true))
+    , m_attribut(mmdeditFormat(mmdedit::couleur(mmdedit::Role::Attribut, sombre)))
+    , m_valeur(mmdeditFormat(mmdedit::couleur(mmdedit::Role::Valeur, sombre)))
+    , m_commentaire(mmdeditFormat(mmdedit::couleur(mmdedit::Role::Commentaire, sombre), false, true))
+    , m_entite(mmdeditFormat(mmdedit::couleur(mmdedit::Role::Entite, sombre)))
+    , m_declaration(mmdeditFormat(mmdedit::couleur(mmdedit::Role::Filet, sombre), true))
     , m_debutCommentaire(QStringLiteral("<!--"))
     , m_finCommentaire(QStringLiteral("-->"))
     , m_debutCdata(QStringLiteral("<!\\[CDATA\\["))
@@ -240,15 +305,15 @@ inline QRegularExpression mmdeditExprCasseIndifferente(const QString& motif)
 class ColorateurDonnees : public ColorateurParRegles
 {
 public:
-  explicit ColorateurDonnees(QTextDocument* document)
+  explicit ColorateurDonnees(QTextDocument* document, bool sombre)
     : ColorateurParRegles(document)
   {
-    const QTextCharFormat section = mmdeditFormat(QStringLiteral("#000080"), true);
-    const QTextCharFormat clef = mmdeditFormat(QStringLiteral("#800080"));
-    const QTextCharFormat chaine = mmdeditFormat(QStringLiteral("#8b0000"));
-    const QTextCharFormat nombre = mmdeditFormat(QStringLiteral("#ff8c00"));
-    const QTextCharFormat litteral = mmdeditFormat(QStringLiteral("#000080"), true);
-    const QTextCharFormat commentaire = mmdeditFormat(QStringLiteral("#008000"), false, true);
+    const QTextCharFormat section = mmdeditFormat(mmdedit::couleur(mmdedit::Role::Section, sombre), true);
+    const QTextCharFormat clef = mmdeditFormat(mmdedit::couleur(mmdedit::Role::Clef, sombre));
+    const QTextCharFormat chaine = mmdeditFormat(mmdedit::couleur(mmdedit::Role::Valeur, sombre));
+    const QTextCharFormat nombre = mmdeditFormat(mmdedit::couleur(mmdedit::Role::Nombre, sombre));
+    const QTextCharFormat litteral = mmdeditFormat(mmdedit::couleur(mmdedit::Role::Litteral, sombre), true);
+    const QTextCharFormat commentaire = mmdeditFormat(mmdedit::couleur(mmdedit::Role::Commentaire, sombre), false, true);
 
     m_regles = {
       // Section d'un fichier INI ou table TOML.
@@ -278,16 +343,16 @@ class ColorateurCode : public ColorateurParRegles
 public:
   enum Etat { EtatNormal = 0, EtatCommentaireBloc = 1 };
 
-  explicit ColorateurCode(QTextDocument* document)
+  explicit ColorateurCode(QTextDocument* document, bool sombre)
     : ColorateurParRegles(document)
-    , m_commentaire(mmdeditFormat(QStringLiteral("#008000"), false, true))
+    , m_commentaire(mmdeditFormat(mmdedit::couleur(mmdedit::Role::Commentaire, sombre), false, true))
     , m_debutBloc(QStringLiteral("(^|\\s)/\\*"))
     , m_finBloc(QStringLiteral("\\*/"))
   {
-    const QTextCharFormat motCle = mmdeditFormat(QStringLiteral("#000080"), true);
-    const QTextCharFormat chaine = mmdeditFormat(QStringLiteral("#8b0000"));
-    const QTextCharFormat nombre = mmdeditFormat(QStringLiteral("#ff8c00"));
-    const QTextCharFormat variable = mmdeditFormat(QStringLiteral("#800080"));
+    const QTextCharFormat motCle = mmdeditFormat(mmdedit::couleur(mmdedit::Role::Titre, sombre), true);
+    const QTextCharFormat chaine = mmdeditFormat(mmdedit::couleur(mmdedit::Role::Code, sombre));
+    const QTextCharFormat nombre = mmdeditFormat(mmdedit::couleur(mmdedit::Role::Nombre, sombre));
+    const QTextCharFormat variable = mmdeditFormat(mmdedit::couleur(mmdedit::Role::Variable, sombre));
 
     m_regles = {
       { mmdeditExprCasseIndifferente(QStringLiteral(
@@ -355,14 +420,14 @@ private:
 class ColorateurJournal : public ColorateurParRegles
 {
 public:
-  explicit ColorateurJournal(QTextDocument* document)
+  explicit ColorateurJournal(QTextDocument* document, bool sombre)
     : ColorateurParRegles(document)
   {
-    const QTextCharFormat horodatage = mmdeditFormat(QStringLiteral("#808080"));
-    const QTextCharFormat erreur = mmdeditFormat(QStringLiteral("#b22222"), true);
-    const QTextCharFormat alerte = mmdeditFormat(QStringLiteral("#ff8c00"), true);
-    const QTextCharFormat information = mmdeditFormat(QStringLiteral("#000080"));
-    const QTextCharFormat mise_au_point = mmdeditFormat(QStringLiteral("#808080"), false, true);
+    const QTextCharFormat horodatage = mmdeditFormat(mmdedit::couleur(mmdedit::Role::Horodatage, sombre));
+    const QTextCharFormat erreur = mmdeditFormat(mmdedit::couleur(mmdedit::Role::Erreur, sombre), true);
+    const QTextCharFormat alerte = mmdeditFormat(mmdedit::couleur(mmdedit::Role::Alerte, sombre), true);
+    const QTextCharFormat information = mmdeditFormat(mmdedit::couleur(mmdedit::Role::Information, sombre));
+    const QTextCharFormat mise_au_point = mmdeditFormat(mmdedit::couleur(mmdedit::Role::MiseAuPoint, sombre), false, true);
 
     m_regles = {
       // ISO 8601 (« 2026-10-10 09:41:06,253 ») puis forme syslog (« Oct 10 09:41:06 »).

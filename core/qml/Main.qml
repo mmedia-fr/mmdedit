@@ -57,7 +57,22 @@ ApplicationWindow {
             police: "Segoe UI", taille: 10, mono: "Cascadia Mono", tailleMono: 11,
             bandeau: "#0b0d2e", texteBandeau: "#ffffff", accent: "#21abe3",
             texteAccent: "#0e6f9e", rubrique: "#276e8b", alerte: "#e61e29",
-            titres: "Saira Condensed"
+            titres: "Saira Condensed", survolBandeau: 0.18
+        },
+        // Variante « nuit » de la charte MMEDIA, la même que dans MMail : fonds
+        // sombres, texte clair, repères de marque éclaircis pour rester lisibles
+        // (4,5:1 au moins sur le fond). La coloration de la saisie suit par
+        // `sombre` (cf. `colorationSombre` ci-dessous) ; le bandeau, le filet et
+        // les pastilles viennent du même mécanisme de marque.
+        "nuit": {
+            libelle: qsTr("Nuit"),
+            fond: "#1b1d22", texte: "#e4e6eb", base: "#24272e",
+            bouton: "#2c3038", surbrillance: "#1f4f6e", texteSurbrillance: "#ffffff",
+            police: "Segoe UI", taille: 10, mono: "Cascadia Mono", tailleMono: 11,
+            bandeau: "#0b0d14", texteBandeau: "#e4e6eb", accent: "#21abe3",
+            texteAccent: "#5cc6f2", rubrique: "#7fb6cf", alerte: "#ff6b6b",
+            titres: "Saira Condensed", survolBandeau: 0.18,
+            lien: "#5cc6f2", sombre: true
         }
     })
 
@@ -70,6 +85,9 @@ ApplicationWindow {
     // Repères de marque : nul hors d'une apparence qui porte un bandeau, et
     // les autres apparences restent alors telles quelles.
     readonly property var marque: jeu && jeu.bandeau ? jeu : null
+    // La saisie se colore pour le fond de l'apparence : « nuit » porte le jeu
+    // sombre, les autres gardent le jeu clair historique.
+    readonly property bool colorationSombre: jeu !== null && jeu.sombre === true
     // Police des titres, si elle est installée ; sinon celle de la fenêtre.
     readonly property string policeTitres: marque && Qt.fontFamilies().indexOf(marque.titres) >= 0
                                            ? marque.titres : font.family
@@ -82,10 +100,13 @@ ApplicationWindow {
     }
 
     // Bouton de la barre de mise en forme. Sous une apparence de marque, texte
-    // blanc sur le bandeau, pastille claire au survol ; ailleurs, le bouton
-    // d'outil du style, intact.
+    // blanc sur le bandeau, pastille claire au survol — le même voile que dans
+    // MMail, dont l'opacité suit l'apparence (`survolBandeau`), plus dense à
+    // l'appui ; ailleurs, le bouton d'outil du style, intact.
     component BoutonEntete: ToolButton {
         id: be
+        property double opacitePastille: fenetre.marque && fenetre.marque.survolBandeau !== undefined
+                                        ? fenetre.marque.survolBandeau : 0.14
         Rectangle {
             visible: fenetre.marque !== null
             z: -1
@@ -93,7 +114,9 @@ ApplicationWindow {
             anchors.topMargin: 2
             anchors.bottomMargin: 2
             radius: height / 2
-            color: be.down ? Qt.rgba(1, 1, 1, 0.24) : be.hovered ? Qt.rgba(1, 1, 1, 0.14) : "transparent"
+            color: be.down ? Qt.rgba(1, 1, 1, Math.min(be.opacitePastille + 0.1, 0.4))
+                   : be.hovered ? Qt.rgba(1, 1, 1, be.opacitePastille)
+                   : "transparent"
         }
         SiMarque { target: be.background; property: "visible"; value: false }
         SiMarque {
@@ -129,6 +152,24 @@ ApplicationWindow {
             when: fenetre.jeu !== null
             restoreMode: Binding.RestoreBindingOrValue
         }
+    }
+
+    // Rôles que la plupart des apparences laissent au système : le lien de
+    // l'aperçu Markdown ne suit qu'une apparence qui en définit la couleur —
+    // « nuit », où le bleu clair reste lisible sur fond sombre.
+    Binding {
+        target: fenetre
+        property: "palette.link"
+        when: fenetre.jeu !== null && fenetre.jeu["lien"] !== undefined
+        value: fenetre.jeu ? fenetre.jeu["lien"] : ""
+        restoreMode: Binding.RestoreBindingOrValue
+    }
+    Binding {
+        target: fenetre
+        property: "palette.linkVisited"
+        when: fenetre.jeu !== null && fenetre.jeu["lien"] !== undefined
+        value: fenetre.jeu ? fenetre.jeu["lien"] : ""
+        restoreMode: Binding.RestoreBindingOrValue
     }
 
     // ------------------------------------------------------------------- zoom
@@ -362,7 +403,7 @@ ApplicationWindow {
     // Une apparence par entrée de menu, exclusives entre elles.
     Instantiator {
         id: actionsApparence
-        model: ["classique", "moderne", "systeme", "mmedia"]
+        model: ["classique", "moderne", "systeme", "mmedia", "nuit"]
         delegate: Action {
             required property string modelData
             text: fenetre.jeuxApparence[modelData].libelle
@@ -1171,6 +1212,9 @@ ApplicationWindow {
 
     function choisirApparence(nom) {
         apparence = nom
+        // Le jeu de teintes de la saisie suit le fond de l'apparence ; les
+        // réglages de vues (éditeur, aperçu) ne bougent pas.
+        pont.colorer(editeur.textDocument, doc.format, fenetre.colorationSombre)
         flash(qsTr("Apparence : %1.").arg(jeuxApparence[nom].libelle))
     }
 
@@ -1185,8 +1229,9 @@ ApplicationWindow {
     // un Markdown, l'aperçu ne se pose que si « Aperçu des fichiers Markdown »
     // est coché : décoché, la saisie seule tient d'un fichier à l'autre.
     function appliquerFormat() {
-        // La coloration suit le format du fichier : Markdown, XML, ou aucune.
-        pont.colorer(editeur.textDocument, doc.format)
+        // La coloration suit le format du fichier — Markdown, XML, ou aucune —
+        // et le fond de l'apparence.
+        pont.colorer(editeur.textDocument, doc.format, fenetre.colorationSombre)
         actVoirApercu.checked = doc.estMarkdown() && actApercuMd.checked
         if (!actVoirApercu.checked)
             actVoirEditeur.checked = true
@@ -1537,8 +1582,15 @@ ApplicationWindow {
         // Les repères de marque sont lus : le bandeau remplace le fond du
         // style, puis le style revient en quittant l'apparence.
         verifier("bandeau MMEDIA", entete.background.visible, false)
+        // « Nuit » : même mécanisme de marque — bandeau sombre lui aussi —,
+        // et la coloration de la saisie bascule sur le jeu sombre.
+        choisirApparence("nuit")
+        verifier("apparence nuit", palette.window.toString(), "#1b1d22")
+        verifier("bandeau nuit", entete.background.visible, false)
+        verifier("coloration nuit", fenetre.colorationSombre, true)
         choisirApparence("moderne")
         verifier("bandeau rendu", entete.background.visible, true)
+        verifier("coloration rendue", fenetre.colorationSombre, false)
         choisirApparence("systeme")
         verifier("apparence systeme", palette.window.toString(), fondSysteme.toString())
 
@@ -1568,11 +1620,12 @@ ApplicationWindow {
                        + "2026-10-10 09:41:06 ERROR panne\n<balise attribut=\"v\"/>"
         var temoin = editeur.text
         var cles = ["markdown", "xml", "donnees", "code", "journal", "texte"]
+        var cles = ["markdown", "xml", "donnees", "code", "journal", "texte"]
         for (var i = 0; i < cles.length; ++i) {
-            pont.colorer(editeur.textDocument, cles[i])
+            pont.colorer(editeur.textDocument, cles[i], fenetre.colorationSombre)
             verifier("coloration " + cles[i], editeur.text, temoin)
         }
-        pont.colorer(editeur.textDocument, doc.format)
+        pont.colorer(editeur.textDocument, doc.format, fenetre.colorationSombre)
 
         // Avis de nouvelle version : coupé pendant le contrôle — la fabrication
         // ne sort pas sur le réseau —, et le bandeau ne paraît qu'une version
@@ -1645,7 +1698,7 @@ ApplicationWindow {
             reglagesMiseAJour.version = ""
             reglagesMiseAJour.choix = ""
         }
-        pont.colorer(editeur.textDocument, doc.format)
+        pont.colorer(editeur.textDocument, doc.format, fenetre.colorationSombre)
         // « MMdedit fichier.md », et le « Ouvrir avec » de Windows qui s'y ramène.
         if (typeof fichierInitial !== "undefined" && fichierInitial.toString().length > 0)
             charger(fichierInitial)

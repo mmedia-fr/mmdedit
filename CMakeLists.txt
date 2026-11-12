@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 # MMdedit — noyau Rust (core/), interface Qt 6 / QML.
 cmake_minimum_required(VERSION 3.24)
-project(mmdedit VERSION 0.4.12 LANGUAGES CXX)
+project(mmdedit VERSION 0.4.13 LANGUAGES CXX)
 
 # Ni macOS ni iOS (décision du 2026-11-02, motif au README).
 if(APPLE)
