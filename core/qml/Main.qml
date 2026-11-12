@@ -944,10 +944,10 @@ ApplicationWindow {
     }
 
     // L'enregistrement propose les types comme le fait l'Explorateur Windows :
-    // les mêmes familles d'extensions que le dialogue d'ouverture, et
-    // l'extension suit le type retenu — saisir « notes » avec « Texte
-    // (*.txt) » enregistre « notes.txt », « Tous les fichiers » laisse le nom
-    // tel quel (demande du 12/11).
+    // les mêmes familles d'extensions que le dialogue d'ouverture. Un type
+    // choisi là-bas impose son extension au dialogue du système, et le nom
+    // tapé sans extension reçoit le suffixe de la famille du document (demande
+    // du 12/11) ; « Tous les fichiers » ne pose aucun suffixe.
     FileDialog {
         id: dlgEnregistrer
         title: qsTr("Enregistrer sous")
@@ -958,7 +958,6 @@ ApplicationWindow {
                       qsTr("Code et scripts (*.sh *.ps1 *.bat *.cmd *.py *.rs *.js *.ts *.c *.h *.cpp *.sql)"),
                       qsTr("Journaux (*.log *.out *.err *.trace)"),
                       qsTr("Tous les fichiers (*)")]
-        onSelectedNameFilterChanged: fenetre.regleSuffixeEnregistrement()
         onAccepted: {
             if (doc.enregistrer(selectedFile, editeur.text)) {
                 fenetre.texteReference = editeur.text
@@ -1235,11 +1234,13 @@ ApplicationWindow {
     function enregistrerSous() {
         if (doc.chemin.length > 0)
             dlgEnregistrer.currentFile = "file://" + doc.chemin
-        dlgEnregistrer.selectedNameFilter = fenetre.filtreDuFormat(doc.format)
-        // Sans cet appel, la famille retenue ne passe pas toujours par un
-        // changement effectif de filtre, et son suffixe ne serait pas posé —
-        // c'est le cas de la première famille, posée d'office.
-        fenetre.regleSuffixeEnregistrement()
+        // Le nom tapé sans extension reçoit le suffixe de la famille du
+        // document : « Sans titre » en texte propose « notes.txt », un `.md`
+        // propose « notes.md ». Qt Quick n'expose pas le type retenu dans le
+        // dialogue — un type choisi là-bas impose son extension au dialogue
+        // du système, et le fichier écrit reste la seule vérité : le format
+        // suit l'extension, comme partout.
+        dlgEnregistrer.defaultSuffix = fenetre.suffixeDuFiltre(fenetre.filtreDuFormat(doc.format))
         dlgEnregistrer.open()
     }
 
@@ -1261,25 +1262,21 @@ ApplicationWindow {
         return qsTr("Tous les fichiers (*)")
     }
 
-    // Le suffixe que le dialogue ajoute suit la famille retenue : sa première
-    // extension, comme le fait l'Explorateur Windows. « Tous les fichiers »
-    // n'en pose aucun — un nom déjà tapé avec son extension garde son
-    // extension, et le format du fichier s'en déduit comme ailleurs.
-    function regleSuffixeEnregistrement() {
-        var filtre = dlgEnregistrer.selectedNameFilter
-        dlgEnregistrer.defaultSuffix = ""
+    // Première extension d'une famille : « Markdown (*.md *.markdown) » rend
+    // « md », « Texte (*.txt) » rend « txt ». « Tous les fichiers (*) » n'en a
+    // aucune — le nom tapé reste tel quel.
+    function suffixeDuFiltre(filtre) {
         var ouverture = filtre.lastIndexOf("(")
         var fermeture = filtre.lastIndexOf(")")
         if (ouverture < 0 || fermeture <= ouverture)
-            return
+            return ""
         var motifs = filtre.substring(ouverture + 1, fermeture).split(" ")
         for (var i = 0; i < motifs.length; i++) {
             if (motifs[i].length > 2 && motifs[i].charAt(0) === "*"
-                    && motifs[i].charAt(1) === ".") {
-                dlgEnregistrer.defaultSuffix = motifs[i].substring(2)
-                return
-            }
+                    && motifs[i].charAt(1) === ".")
+                return motifs[i].substring(2)
         }
+        return ""
     }
 
     // Demande s'il faut enregistrer, puis exécute l'action demandée.
