@@ -238,14 +238,22 @@ ApplicationWindow {
     Settings {
         category: "affichage"
         property alias zoom: fenetre.zoom
+        property alias memoireFenetre: actMemoireFenetre.checked
+        property alias apercuMd: actApercuMd.checked
     }
 
+    // Position et taille de la fenêtre. Valeurs propres, sans alias : rien ne
+    // s'y écrit qu'à la fermeture, la mémoire cochée — un alias suivrait chaque
+    // déplacement au lieu de ce qui reste quand on s'en va. Elles se
+    // rétablissent au démarrage, toujours la mémoire cochée (cf.
+    // actMemoireFenetre, réglage « affichage » ci-dessus).
     Settings {
+        id: reglagesFenetre
         category: "fenetre"
-        property alias x: fenetre.x
-        property alias y: fenetre.y
-        property alias largeur: fenetre.width
-        property alias hauteur: fenetre.height
+        property int x: 0
+        property int y: 0
+        property int largeur: 0
+        property int hauteur: 0
     }
 
     // ----------------------------------------------------------------- actions
@@ -378,6 +386,25 @@ ApplicationWindow {
         checked: true
         onTriggered: fenetre.basculerVue(actVoirApercu, actVoirEditeur)
     }
+    // Aperçu des fichiers Markdown : réglage durable, et non plus le seul
+    // état de la session — décoché, un `.md` ouvert s'affiche en saisie seule,
+    // et sa fenêtre de visualisation ne revient plus, jusqu'à ce que le
+    // réglage soit coché de nouveau (demande du 12/11).
+    Action {
+        id: actApercuMd
+        text: qsTr("Aperçu des fichiers &Markdown")
+        checkable: true
+        checked: true
+    }
+    // Mémoire de la fenêtre : ce que le socle faisait toujours — position et
+    // taille enregistrées à la fermeture, rétablies au démarrage — devient un
+    // réglage (demande du 12/11).
+    Action {
+        id: actMemoireFenetre
+        text: qsTr("&Mémoriser la position et la taille")
+        checkable: true
+        checked: true
+    }
     Action {
         id: actZoomPlus
         text: qsTr("Zoom a&vant")
@@ -451,10 +478,13 @@ ApplicationWindow {
             title: qsTr("&Affichage")
             MenuItem { action: actVoirEditeur }
             MenuItem { action: actVoirApercu }
+            MenuItem { action: actApercuMd }
             MenuSeparator {}
             MenuItem { action: actZoomPlus }
             MenuItem { action: actZoomMoins }
             MenuItem { action: actZoomNormal }
+            MenuSeparator {}
+            MenuItem { action: actMemoireFenetre }
             MenuSeparator {}
             Menu {
                 title: qsTr("A&pparence")
@@ -913,17 +943,28 @@ ApplicationWindow {
         onAccepted: fenetre.charger(selectedFile)
     }
 
+    // L'enregistrement propose les types comme le fait l'Explorateur Windows :
+    // les mêmes familles d'extensions que le dialogue d'ouverture. Un type
+    // choisi là-bas impose son extension au dialogue du système, et le nom
+    // tapé sans extension reçoit le suffixe de la famille du document (demande
+    // du 12/11) ; « Tous les fichiers » ne pose aucun suffixe.
     FileDialog {
         id: dlgEnregistrer
         title: qsTr("Enregistrer sous")
         fileMode: FileDialog.SaveFile
-        defaultSuffix: "md"
         nameFilters: [qsTr("Markdown (*.md *.markdown)"), qsTr("Texte (*.txt)"),
-                      qsTr("CSV (*.csv)"), qsTr("Tous les fichiers (*)")]
+                      qsTr("CSV (*.csv)"),
+                      qsTr("Configuration (*.json *.yaml *.yml *.toml *.ini *.conf *.cfg *.env)"),
+                      qsTr("Code et scripts (*.sh *.ps1 *.bat *.cmd *.py *.rs *.js *.ts *.c *.h *.cpp *.sql)"),
+                      qsTr("Journaux (*.log *.out *.err *.trace)"),
+                      qsTr("Tous les fichiers (*)")]
         onAccepted: {
             if (doc.enregistrer(selectedFile, editeur.text)) {
                 fenetre.texteReference = editeur.text
                 fenetre.modifie = false
+                // Le document suit son fichier : format déduit de l'extension,
+                // coloration et aperçu réappliqués aussitôt.
+                fenetre.appliquerFormat()
                 fenetre.flash(qsTr("Enregistré."))
                 fenetre.poursuivre()
             }
@@ -1139,12 +1180,14 @@ ApplicationWindow {
             bascule.checked = true
     }
 
-    // Applique au document ouvert ce que son format impose : pas d'aperçu rendu
-    // hors Markdown, et l'éditeur reprend alors toute la fenêtre.
+    // Applique au document ouvert ce que son format impose : pas d'aperçu
+    // rendu hors Markdown, l'éditeur reprend alors toute la fenêtre — et pour
+    // un Markdown, l'aperçu ne se pose que si « Aperçu des fichiers Markdown »
+    // est coché : décoché, la saisie seule tient d'un fichier à l'autre.
     function appliquerFormat() {
         // La coloration suit le format du fichier : Markdown, XML, ou aucune.
         pont.colorer(editeur.textDocument, doc.format)
-        actVoirApercu.checked = doc.estMarkdown()
+        actVoirApercu.checked = doc.estMarkdown() && actApercuMd.checked
         if (!actVoirApercu.checked)
             actVoirEditeur.checked = true
     }
@@ -1191,7 +1234,49 @@ ApplicationWindow {
     function enregistrerSous() {
         if (doc.chemin.length > 0)
             dlgEnregistrer.currentFile = "file://" + doc.chemin
+        // Le nom tapé sans extension reçoit le suffixe de la famille du
+        // document : « Sans titre » en texte propose « notes.txt », un `.md`
+        // propose « notes.md ». Qt Quick n'expose pas le type retenu dans le
+        // dialogue — un type choisi là-bas impose son extension au dialogue
+        // du système, et le fichier écrit reste la seule vérité : le format
+        // suit l'extension, comme partout.
+        dlgEnregistrer.defaultSuffix = fenetre.suffixeDuFiltre(fenetre.filtreDuFormat(doc.format))
         dlgEnregistrer.open()
+    }
+
+    // Famille du dialogue d'enregistrement qui correspond au format courant :
+    // c'est elle que le dialogue retient à son ouverture. Le XML n'a pas de
+    // famille propre — le dialogue d'ouverture n'en propose pas non plus — et
+    // garde « Tous les fichiers », qui n'impose aucune extension.
+    function filtreDuFormat(cle) {
+        if (cle === "markdown")
+            return qsTr("Markdown (*.md *.markdown)")
+        if (cle === "donnees")
+            return qsTr("Configuration (*.json *.yaml *.yml *.toml *.ini *.conf *.cfg *.env)")
+        if (cle === "code")
+            return qsTr("Code et scripts (*.sh *.ps1 *.bat *.cmd *.py *.rs *.js *.ts *.c *.h *.cpp *.sql)")
+        if (cle === "journal")
+            return qsTr("Journaux (*.log *.out *.err *.trace)")
+        if (cle === "texte")
+            return qsTr("Texte (*.txt)")
+        return qsTr("Tous les fichiers (*)")
+    }
+
+    // Première extension d'une famille : « Markdown (*.md *.markdown) » rend
+    // « md », « Texte (*.txt) » rend « txt ». « Tous les fichiers (*) » n'en a
+    // aucune — le nom tapé reste tel quel.
+    function suffixeDuFiltre(filtre) {
+        var ouverture = filtre.lastIndexOf("(")
+        var fermeture = filtre.lastIndexOf(")")
+        if (ouverture < 0 || fermeture <= ouverture)
+            return ""
+        var motifs = filtre.substring(ouverture + 1, fermeture).split(" ")
+        for (var i = 0; i < motifs.length; i++) {
+            if (motifs[i].length > 2 && motifs[i].charAt(0) === "*"
+                    && motifs[i].charAt(1) === ".")
+                return motifs[i].substring(2)
+        }
+        return ""
     }
 
     // Demande s'il faut enregistrer, puis exécute l'action demandée.
@@ -1327,6 +1412,14 @@ ApplicationWindow {
     // Choix « maintenant » ou « fermeture » fait dans un autre MMdedit, dont le
     // paquet attend : celui-ci, s'il se ferme le dernier, l'installe.
     function retenirPourLaFermeture() {
+        // Mémoire de la fenêtre : la position et la taille partent avec la
+        // fermeture, la mémoire cochée (cf. actMemoireFenetre).
+        if (actMemoireFenetre.checked) {
+            reglagesFenetre.x = Math.round(fenetre.x)
+            reglagesFenetre.y = Math.round(fenetre.y)
+            reglagesFenetre.largeur = Math.round(fenetre.width)
+            reglagesFenetre.hauteur = Math.round(fenetre.height)
+        }
         if (installeur.programme() || genreMiseAJour !== "setup")
             return
         var v = reglagesMiseAJour.version
@@ -1523,7 +1616,30 @@ ApplicationWindow {
         return ecarts.length === 0 ? "ok" : ecarts.join(" ; ")
     }
 
+    // La position mémorisée ne se rétablit que si elle tombe sur un écran
+    // branché : une fenêtre revenue à un emplacement disparu serait perdue
+    // hors de tout écran.
+    function surUnEcran(x, y, largeur, hauteur) {
+        var ecrans = Qt.application.screens
+        for (var i = 0; i < ecrans.length; i++) {
+            var e = ecrans[i]
+            if (x < e.virtualX + e.width && x + largeur > e.virtualX
+                    && y < e.virtualY + e.height && y + hauteur > e.virtualY)
+                return true
+        }
+        return false
+    }
+
     Component.onCompleted: {
+        // Position et taille mémorisées, rétablies la mémoire cochée.
+        if (actMemoireFenetre.checked && reglagesFenetre.largeur > 0
+                && surUnEcran(reglagesFenetre.x, reglagesFenetre.y,
+                             reglagesFenetre.largeur, reglagesFenetre.hauteur)) {
+            fenetre.x = reglagesFenetre.x
+            fenetre.y = reglagesFenetre.y
+            fenetre.width = reglagesFenetre.largeur
+            fenetre.height = reglagesFenetre.hauteur
+        }
         // Un scénario de mise à jour part d'un choix vierge.
         if (scenario.indexOf("mise-a-jour") === 0) {
             reglagesMiseAJour.version = ""

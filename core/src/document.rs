@@ -31,7 +31,7 @@ pub mod qobject {
         #[qproperty(QString, erreur)]
         type Document = super::DocumentRust;
 
-        /// Repart d'un document vide, traité comme du Markdown.
+        /// Repart d'un document vide, traité comme du texte brut.
         #[qinvokable]
         #[cxx_name = "nouveau"]
         fn nouveau(self: Pin<&mut Document>);
@@ -92,8 +92,8 @@ impl Default for DocumentRust {
             chemin: QString::from(""),
             nom: QString::from(SANS_TITRE),
             encodage: QString::from("UTF-8"),
-            format: QString::from(texte::Format::Markdown.cle()),
-            libelle: QString::from(texte::Format::Markdown.libelle()),
+            format: QString::from(texte::Format::Texte.cle()),
+            libelle: QString::from(texte::Format::Texte.libelle()),
             erreur: QString::from(""),
         }
     }
