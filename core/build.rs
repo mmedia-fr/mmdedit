@@ -12,6 +12,7 @@ fn main() {
 
     CxxQtBuilder::new_qml_module(QmlModule::new("fr.mmedia.mmdedit").qml_files([
         "qml/Main.qml",
+        "qml/Feuilleteur.qml",
         "qml/DialogueRecherche.qml",
         "qml/DialogueTexte.qml",
     ]))

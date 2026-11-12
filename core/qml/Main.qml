@@ -88,6 +88,19 @@ ApplicationWindow {
     // La saisie se colore pour le fond de l'apparence : « nuit » porte le jeu
     // sombre, les autres gardent le jeu clair historique.
     readonly property bool colorationSombre: jeu !== null && jeu.sombre === true
+    // Le document ouvert est-il un PDF ? Il se parcourt dans le feuilleteur,
+    // en lecture seule — rien de ce qui touche au texte ne s'y applique.
+    readonly property bool genrePdf: doc.format === "pdf"
+    // Le feuilleteur vit bureau seul : Qt ne distribue pas de module PDF pour
+    // Android (packages introuvables à l'installation, constaté le 12/11).
+    // Le fichier Feuilleteur.qml, qui l'importe, n'y est donc jamais chargé.
+    readonly property bool feuilleteurDisponible: Qt.platform.os !== "android"
+    // URL ouverte par le feuilleteur, main de l'échange Main/Feuilleteur.
+    property url urlPdf
+    // Contrôle du feuilleteur : pages chargées du PDF courant — négatif en
+    // erreur, nul tant qu'il charge (le test de fumée le lit).
+    property int pagesPdf: chargeurPdf.item ? (chargeurPdf.item.etat === 2 ? chargeurPdf.item.pages
+                                  : chargeurPdf.item.etat === 4 ? -1 : 0) : 0
     // Police des titres, si elle est installée ; sinon celle de la fenêtre.
     readonly property string policeTitres: marque && Qt.fontFamilies().indexOf(marque.titres) >= 0
                                            ? marque.titres : font.family
@@ -312,18 +325,21 @@ ApplicationWindow {
     }
     Action {
         id: actEnregistrer
+        enabled: !fenetre.genrePdf
         text: qsTr("&Enregistrer")
         shortcut: StandardKey.Save
         onTriggered: fenetre.enregistrer()
     }
     Action {
         id: actEnregistrerSous
+        enabled: !fenetre.genrePdf
         text: qsTr("Enregistrer &sous…")
         shortcut: StandardKey.SaveAs
         onTriggered: fenetre.enregistrerSous()
     }
     Action {
         id: actExportPdf
+        enabled: !fenetre.genrePdf
         text: qsTr("Exporter en &PDF…")
         onTriggered: {
             dlgPdf.currentFile = doc.cheminExport(".pdf") !== ""
@@ -386,6 +402,7 @@ ApplicationWindow {
     }
     Action {
         id: actRechercher
+        enabled: !fenetre.genrePdf
         text: qsTr("&Rechercher / Remplacer…")
         shortcut: StandardKey.Find
         onTriggered: dlgRecherche.ouvrir()
@@ -788,6 +805,7 @@ ApplicationWindow {
     // ------------------------------------------------------------------- vues
     SplitView {
         id: partage
+        visible: !fenetre.genrePdf
         anchors.top: bandeauVersion.bottom
         anchors.left: parent.left
         anchors.right: parent.right
@@ -892,6 +910,44 @@ ApplicationWindow {
         onTriggered: fenetre.rafraichir()
     }
 
+    // --------------------------------------------------------------- feuilleteur
+    // Un `.pdf` ouvert se feuillette là où s'éditent les textes (étape 5 de la
+    // feuille de route du 12/11) : lecture seule — le noyau n'en lit aucun
+    // texte, et rien ne peut s'enregistrer par-dessus le fichier. Le composant
+    // vit à part (Feuilleteur.qml) : son import de QtQuick.Pdf n'existe pas
+    // sous Android, et le Loader ne l'y instancie jamais — l'avertissement est
+    // affiché à sa place.
+    Loader {
+        id: chargeurPdf
+        visible: fenetre.genrePdf && fenetre.feuilleteurDisponible
+        active: visible
+        anchors.top: bandeauVersion.bottom
+        anchors.left: parent.left
+        anchors.right: parent.right
+        anchors.bottom: parent.bottom
+        onVisibleChanged: if (!visible && item)
+                              item.fermer()
+        source: "Feuilleteur.qml"
+        onLoaded: item.ouvrir(fenetre.urlPdf)
+    }
+    Pane {
+        id: avertissementPdf
+        visible: fenetre.genrePdf && !fenetre.feuilleteurDisponible
+        anchors.top: bandeauVersion.bottom
+        anchors.left: parent.left
+        anchors.right: parent.right
+        anchors.bottom: parent.bottom
+        Label {
+            anchors.centerIn: parent
+            wrapMode: Text.WordWrap
+            width: Math.min(parent.width - 32, 480)
+            horizontalAlignment: Text.AlignHCenter
+            text: qsTr("« %1 » est un PDF. Le feuilleteur n'existe pas sous "
+                       + "Android ; il s'ouvre avec votre lecteur habituel."
+                       ).arg(doc.nom)
+        }
+    }
+
     // ------------------------------------------------------------- barre d'état
     footer: ToolBar {
         RowLayout {
@@ -973,10 +1029,11 @@ ApplicationWindow {
         id: dlgOuvrir
         title: qsTr("Ouvrir un fichier")
         fileMode: FileDialog.OpenFile
-        // MMdedit ouvre tout fichier texte : ces filtres ne restreignent rien,
-        // ils évitent seulement de chercher à la main dans un dossier chargé.
+        // MMdedit ouvre tout fichier texte, et feuillette les PDF : ces filtres
+        // ne restreignent rien, ils évitent seulement de chercher à la main
+        // dans un dossier chargé.
         nameFilters: [qsTr("Markdown (*.md *.markdown)"), qsTr("Texte (*.txt)"),
-                      qsTr("CSV (*.csv)"),
+                      qsTr("CSV (*.csv)"), qsTr("PDF (*.pdf)"),
                       qsTr("Configuration (*.json *.yaml *.yml *.toml *.ini *.conf *.cfg *.env)"),
                       qsTr("Code et scripts (*.sh *.ps1 *.bat *.cmd *.py *.rs *.js *.ts *.c *.h *.cpp *.sql)"),
                       qsTr("Journaux (*.log *.out *.err *.trace)"),
@@ -1130,7 +1187,14 @@ ApplicationWindow {
         apercu.text = rendu
         largeurRendue = apercu.width
         tailleRendue = apercu.font.pointSize
-        compteurs.text = doc.statistiques(editeur.text)
+        // Un PDF ouvert se compte en pages, non en mots ; en chargement, la
+        // barre d'état le dit, sans compter des pages qui n'y sont pas.
+        compteurs.text = genrePdf
+                ? (pagesPdf > 0 ? qsTr("%n page(s)", "", pagesPdf)
+                  : pagesPdf < 0 ? qsTr("PDF illisible : %1")
+                        .arg(chargeurPdf.item ? chargeurPdf.item.erreur : "")
+                  : qsTr("Chargement du PDF…"))
+                : doc.statistiques(editeur.text)
     }
 
     // Heure en secondes, telle que l'attend la règle du presse-papier.
@@ -1238,9 +1302,16 @@ ApplicationWindow {
     }
 
     function charger(url) {
+        // Un PDF se feuillette, sans passer par la lecture de texte (étape 5
+        // de la feuille de route du 12/11).
+        if (doc.estPdf(url)) {
+            ouvrirPdf(url)
+            return
+        }
         chargementEnCours = true
         var contenu = doc.ouvrir(url)
         if (doc.erreur.length === 0) {
+            urlPdf = ""
             editeur.text = contenu
             // Relu sur l'éditeur plutôt que repris du fichier : c'est à ce que
             // porte le TextArea que les frappes seront comparées.
@@ -1252,9 +1323,36 @@ ApplicationWindow {
         rafraichir()
     }
 
+    function ouvrirPdf(url) {
+        if (!doc.ouvrirPdf(url)) {
+            flash(doc.erreur)
+            return false
+        }
+        // Aucun texte lu : le feuilleteur charge le fichier de son côté, et le
+        // document ouvert ne porte que le chemin, le nom et le format.
+        urlPdf = url
+        editeur.text = ""
+        texteReference = ""
+        modifie = false
+        actVoirApercu.checked = false
+        actVoirEditeur.checked = true
+        // Le Loader ne s'active qu'une fois, sur le premier PDF ; les
+        // suivants passent par le chargement de l'URL.
+        if (chargeurPdf.item)
+            chargeurPdf.item.ouvrir(url)
+        if (!feuilleteurDisponible)
+            flash(qsTr("« %1 » : le feuilleteur n'existe pas sous Android ; "
+                       + "le fichier s'ouvre avec votre lecteur habituel.").arg(doc.nom))
+        else
+            flash(qsTr("« %1 » s'ouvre en lecture seule.").arg(doc.nom))
+        rafraichir()
+        return true
+    }
+
     function nouveau() {
         chargementEnCours = true
         doc.nouveau()
+        urlPdf = ""
         editeur.text = ""
         texteReference = ""
         modifie = false
@@ -1522,6 +1620,27 @@ ApplicationWindow {
     // en argument est bien arrivé jusqu'à lui.
     function texteCourant() {
         return editeur.text
+    }
+
+    // Contrôle du feuilleteur : le test de fumée l'appelle une fois le PDF
+    // ouvert (`ferme` faux : vue en place, édition coupée), puis après
+    // « Nouveau » (`ferme` vrai : l'édition est revenue). Rend « ok » ou
+    // l'écart constaté.
+    function controleFeuilleteur(ferme) {
+        var ecarts = []
+        function verifier(quoi, obtenu, attendu) {
+            if (obtenu !== attendu)
+                ecarts.push(quoi + " : « " + obtenu + " » au lieu de « " + attendu + " »")
+        }
+        verifier("genre pdf", genrePdf, !ferme)
+        verifier("feuilleteur visible",
+                 chargeurPdf.visible, feuilleteurDisponible && !ferme)
+        verifier("avertissement android visible",
+                 avertissementPdf.visible, !feuilleteurDisponible && !ferme)
+        verifier("edition visible", partage.visible, ferme)
+        verifier("enregistrer coupe", actEnregistrer.enabled, ferme)
+        verifier("recherche coupee", actRechercher.enabled, ferme)
+        return ecarts.length === 0 ? "ok" : ecarts.join(" ; ")
     }
 
     // Contrôle d'intégration : exerce la chaîne complète — noyau Rust, plan,
