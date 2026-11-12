@@ -91,6 +91,9 @@ ApplicationWindow {
     // Le document ouvert est-il un PDF ? Il se parcourt dans le feuilleteur,
     // en lecture seule — rien de ce qui touche au texte ne s'y applique.
     readonly property bool genrePdf: doc.format === "pdf"
+    // Le document ouvert est-il un import bureautique ? Il se lit et se
+    // colore comme du Markdown, mais son original ne s'écrit jamais.
+    readonly property bool genreBureautique: doc.format === "bureautique"
     // Le feuilleteur vit bureau seul : Qt ne distribue pas de module PDF pour
     // Android (packages introuvables à l'installation, constaté le 12/11).
     // Le fichier Feuilleteur.qml, qui l'importe, n'y est donc jamais chargé.
@@ -325,7 +328,7 @@ ApplicationWindow {
     }
     Action {
         id: actEnregistrer
-        enabled: !fenetre.genrePdf
+        enabled: !fenetre.genrePdf && !fenetre.genreBureautique
         text: qsTr("&Enregistrer")
         shortcut: StandardKey.Save
         onTriggered: fenetre.enregistrer()
@@ -1034,6 +1037,7 @@ ApplicationWindow {
         // dans un dossier chargé.
         nameFilters: [qsTr("Markdown (*.md *.markdown)"), qsTr("Texte (*.txt)"),
                       qsTr("CSV (*.csv)"), qsTr("PDF (*.pdf)"),
+                      qsTr("Bureautique (*.docx *.odt *.epub) — importé en Markdown"),
                       qsTr("Configuration (*.json *.yaml *.yml *.toml *.ini *.conf *.cfg *.env)"),
                       qsTr("Code et scripts (*.sh *.ps1 *.bat *.cmd *.py *.rs *.js *.ts *.c *.h *.cpp *.sql)"),
                       qsTr("Journaux (*.log *.out *.err *.trace)"),
@@ -1278,8 +1282,14 @@ ApplicationWindow {
         apparence = nom
         // Le jeu de teintes de la saisie suit le fond de l'apparence ; les
         // réglages de vues (éditeur, aperçu) ne bougent pas.
-        pont.colorer(editeur.textDocument, doc.format, fenetre.colorationSombre)
+        pont.colorer(editeur.textDocument, fenetre.cleColoration(), fenetre.colorationSombre)
         flash(qsTr("Apparence : %1.").arg(jeuxApparence[nom].libelle))
+    }
+
+    // Clé de coloration du document courant : l'import bureautique, quoique
+    // son format s'appelle « bureautique », se colore en Markdown — c'en est.
+    function cleColoration() {
+        return genreBureautique ? "markdown" : doc.format
     }
 
     // Au moins une des deux vues reste visible.
@@ -1295,7 +1305,7 @@ ApplicationWindow {
     function appliquerFormat() {
         // La coloration suit le format du fichier — Markdown, XML, ou aucune —
         // et le fond de l'apparence.
-        pont.colorer(editeur.textDocument, doc.format, fenetre.colorationSombre)
+        pont.colorer(editeur.textDocument, fenetre.cleColoration(), fenetre.colorationSombre)
         actVoirApercu.checked = doc.estMarkdown() && actApercuMd.checked
         if (!actVoirApercu.checked)
             actVoirEditeur.checked = true
@@ -1643,6 +1653,22 @@ ApplicationWindow {
         return ecarts.length === 0 ? "ok" : ecarts.join(" ; ")
     }
 
+    // Contrôle de l'import bureautique : le test de fumée l'appelle une fois
+    // le .docx fabriqué ouvert (`ferme` faux), puis après « Nouveau ». Rend
+    // « ok » ou l'écart constaté.
+    function controleBureautique(ferme) {
+        var ecarts = []
+        function verifier(quoi, obtenu, attendu) {
+            if (obtenu !== attendu)
+                ecarts.push(quoi + " : « " + obtenu + " » au lieu de « " + attendu + " »")
+        }
+        verifier("genre bureautique", genreBureautique, !ferme)
+        verifier("enregistrer coupe", actEnregistrer.enabled, ferme)
+        verifier("enregistrer sous permis", actEnregistrerSous.enabled, true)
+        verifier("edition visible", partage.visible, true)
+        return ecarts.length === 0 ? "ok" : ecarts.join(" ; ")
+    }
+
     // Contrôle d'intégration : exerce la chaîne complète — noyau Rust, plan,
     // application sur le TextArea, annulation. Rend « ok » ou l'écart constaté.
     // Appelé par --smoke, il écrase le document : sans danger, rien n'est écrit
@@ -1744,7 +1770,7 @@ ApplicationWindow {
             pont.colorer(editeur.textDocument, cles[i], fenetre.colorationSombre)
             verifier("coloration " + cles[i], editeur.text, temoin)
         }
-        pont.colorer(editeur.textDocument, doc.format, fenetre.colorationSombre)
+        pont.colorer(editeur.textDocument, fenetre.cleColoration(), fenetre.colorationSombre)
 
         // Avis de nouvelle version : coupé pendant le contrôle — la fabrication
         // ne sort pas sur le réseau —, et le bandeau ne paraît qu'une version
@@ -1817,7 +1843,7 @@ ApplicationWindow {
             reglagesMiseAJour.version = ""
             reglagesMiseAJour.choix = ""
         }
-        pont.colorer(editeur.textDocument, doc.format, fenetre.colorationSombre)
+        pont.colorer(editeur.textDocument, fenetre.cleColoration(), fenetre.colorationSombre)
         // « MMdedit fichier.md », et le « Ouvrir avec » de Windows qui s'y ramène.
         if (typeof fichierInitial !== "undefined" && fichierInitial.toString().length > 0)
             charger(fichierInitial)

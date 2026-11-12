@@ -67,6 +67,9 @@ const EXT_JOURNAL: &[&str] = &["log", "out", "err", "trace"];
 /// PDF : feuilletés, pas édités — rien n'en est lu comme du texte.
 const EXT_PDF: &[&str] = &["pdf"];
 
+/// Bureautique : zippés, convertis en Markdown à l'ouverture, jamais écrits.
+const EXT_BUREAUTIQUE: &[&str] = &["docx", "odt", "epub"];
+
 /// Fichiers reconnus à leur nom, faute d'extension — « .env » n'en a pas, au
 /// sens de la fonction `extension()` ci-dessous, et un Makefile n'en porte pas.
 const NOMS_CONNUS: &[(&str, Format)] = &[
@@ -87,6 +90,7 @@ pub enum Format {
     Code,
     Journal,
     Pdf,
+    Bureautique,
     Texte,
 }
 
@@ -100,6 +104,7 @@ impl Format {
             Format::Code => "code",
             Format::Journal => "journal",
             Format::Pdf => "pdf",
+            Format::Bureautique => "bureautique",
             Format::Texte => "texte",
         }
     }
@@ -113,6 +118,7 @@ impl Format {
             Format::Code => "Code",
             Format::Journal => "Journal",
             Format::Pdf => "PDF",
+            Format::Bureautique => "Bureautique (import)",
             Format::Texte => "Texte",
         }
     }
@@ -144,12 +150,14 @@ pub fn format_du_chemin(chemin: &str) -> Format {
         Format::Journal
     } else if EXT_PDF.contains(&ext.as_str()) {
         Format::Pdf
+    } else if EXT_BUREAUTIQUE.contains(&ext.as_str()) {
+        Format::Bureautique
     } else {
         Format::Texte
     }
 }
 
-fn extension(chemin: &str) -> String {
+pub fn extension(chemin: &str) -> String {
     let nom = nom_fichier(chemin);
     match nom.rfind('.') {
         // Un nom commençant par un point n'a pas d'extension (« .gitignore »).
@@ -318,6 +326,9 @@ mod tests {
         assert_eq!(format_du_chemin("/tmp/requete.sql"), Format::Code);
         assert_eq!(format_du_chemin("/var/log/syslog.log"), Format::Journal);
         assert_eq!(format_du_chemin("/tmp/rapport.pdf"), Format::Pdf);
+        assert_eq!(format_du_chemin("/tmp/memoire.DOCX"), Format::Bureautique);
+        assert_eq!(format_du_chemin("/tmp/livre.EPUB"), Format::Bureautique);
+        assert_eq!(format_du_chemin("/tmp/texte.odt"), Format::Bureautique);
         // Reconnus à leur nom : ils n'ont pas d'extension.
         assert_eq!(format_du_chemin("/src/Makefile"), Format::Code);
         assert_eq!(format_du_chemin("/src/Dockerfile"), Format::Code);
@@ -335,6 +346,7 @@ mod tests {
             Format::Code,
             Format::Journal,
             Format::Pdf,
+            Format::Bureautique,
             Format::Texte,
         ];
         // Les clés partent à QML, qui les compare telles quelles pour choisir la

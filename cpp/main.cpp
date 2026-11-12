@@ -22,10 +22,103 @@
 #include <QtQuickControls2/QQuickStyle>
 #include <QtQml/qqml.h>
 
+#include <QtGui/QImage>
+
+namespace {
+// Le test de fumée fabrique son propre .docx d'import : un ZIP stocké sans
+// compression — entête locale, répertoire central et somme CRC apposées à la
+// main, les deux pages du format suffisent à l'import (étape 6 de la
+// feuille de route du 12/11).
+
+void ajout16(QByteArray& flux, quint16 valeur)
+{
+  flux.append(char(quint8(valeur & 0xFF)));
+  flux.append(char(quint8(valeur >> 8)));
+}
+
+void ajout32(QByteArray& flux, quint32 valeur)
+{
+  for (int decalage = 0; decalage < 32; decalage += 8) {
+    flux.append(char(quint8(valeur >> decalage)));
+  }
+}
+
+quint32 crc32(const QByteArray& donnees)
+{
+  quint32 crc = 0xFFFFFFFFu;
+  for (const char octet : donnees) {
+    crc ^= quint8(octet);
+    for (int bit = 0; bit < 8; ++bit) {
+      const quint32 masque = (crc & 1u) ? 0xEDB88320u : 0u;
+      crc = (crc >> 1) ^ masque;
+    }
+  }
+  return crc ^ 0xFFFFFFFFu;
+}
+
+QByteArray zipUnMembre(const QByteArray& nom, const QByteArray& contenu)
+{
+  const quint32 somme = crc32(contenu);
+  const quint16 taille = quint16(contenu.size());
+  const quint16 nomTaille = quint16(nom.size());
+  QByteArray local;
+  local.append("PK\x03\x04");
+  ajout16(local, 20);        // version requise
+  ajout16(local, 0);         // attributs généraux
+  ajout16(local, 0);        // stocké, sans compression
+  ajout16(local, 0);        // heure de modification
+  ajout16(local, 0);        // date de modification
+  ajout32(local, somme);
+  ajout32(local, taille);
+  ajout32(local, taille);
+  ajout16(local, nomTaille);
+  ajout16(local, 0);        // attributs étendus : aucun
+  local.append(nom);
+  local.append(contenu);
+  const quint32 departLocale = 0;
+
+  QByteArray central;
+  central.append("PK\x01\x02");
+  ajout16(central, 20);     // version créatrice
+  ajout16(central, 20);     // version requise
+  ajout16(central, 0);      // attributs généraux
+  ajout16(central, 0);     // stocké
+  ajout16(central, 0);      // heure de modification
+  ajout16(central, 0);      // date de modification
+  ajout32(central, somme);
+  ajout32(central, taille);
+  ajout32(central, taille);
+  ajout16(central, nomTaille);
+  ajout16(central, 0);      // attributs étendus : aucun
+  ajout16(central, 0);      // commentaire : aucun
+  ajout16(central, 0);      // numéro de disque de départ
+  ajout16(central, 0);      // attributs internes
+  ajout32(central, 0);      // attributs externes
+  ajout32(central, departLocale);
+  central.append(nom);
+
+  QByteArray fin;
+  fin.append("PK\x05\x06");
+  ajout16(fin, 0);          // disque courant
+  ajout16(fin, 0);          // disque du répertoire
+  ajout16(fin, 1);          // membres sur ce disque
+  ajout16(fin, 1);          // membres au total
+  ajout32(fin, quint32(central.size()));
+  ajout32(fin, quint32(departLocale + local.size()));
+  ajout16(fin, 0);          // commentaire : aucun
+
+  QByteArray archive;
+  archive.append(local);
+  archive.append(central);
+  archive.append(fin);
+  return archive;
+}
+
+}  // namespace
+
 #include "installeur.h"
 #include "pont_texte.h"
 #include "presse_papier.h"
-#include <QtGui/QImage>
 
 #ifdef Q_OS_WIN
 #  include <windows.h>  // GetCommandLineW / CommandLineToArgvW
@@ -270,6 +363,60 @@ int main(int argc, char* argv[])
         std::fprintf(stderr, "smoke: le feuilleteur reste ouvert apres Nouveau : %s\n",
                      etatFeuilleteur.toString().toUtf8().constData());
         QCoreApplication::exit(11);
+        return;
+      }
+      // Import bureautique (étape 6 de la feuille de route du 12/11) : un
+      // .docx minimal, fabriqué sur-le-champ en ZIP stocké, s'ouvre converti
+      // en Markdown — lecture seule, l'original ne saurait s'écrire dessus.
+      QTemporaryFile docx(QDir::tempPath() + QStringLiteral("/mmdedit-XXXXXX.docx"));
+      docx.open();
+      const QByteArray xmlDocx = QByteArrayLiteral(R"(<?xml version="1.0" encoding="UTF-8"?>)"
+                                                   R"(<w:document xmlns:w="ex"><w:body>)"
+                                                   R"(<w:p><w:pPr><w:pStyle w:val="Heading1"/></w:pPr>)"
+                                                   R"(<w:r><w:t>Titre importé</w:t></w:r></w:p>)"
+                                                   R"(<w:p><w:r><w:t>Paragraphe importé.</w:t></w:r></w:p>)"
+                                                   R"(</w:body></w:document>)");
+      docx.write(zipUnMembre(QByteArrayLiteral("word/document.xml"), xmlDocx));
+      docx.close();
+      const QString cheminDocx = docx.fileName();
+      QMetaObject::invokeMethod(racine, "charger",
+                                Q_ARG(QVariant, QUrl::fromLocalFile(cheminDocx)));
+      for (int i = 0; i < 20; ++i) {
+        QThread::msleep(10);
+        QCoreApplication::processEvents();
+      }
+      QVariant texteImporte;
+      QMetaObject::invokeMethod(racine, "texteCourant",
+                                Q_RETURN_ARG(QVariant, texteImporte));
+      const QString attenduImport = QStringLiteral("# Titre importé\n\nParagraphe importé.");
+      std::printf("smoke: import bureautique attendu=%d\n",
+                  texteImporte.toString() == attenduImport ? 1 : 0);
+      std::fflush(stdout);
+      QVariant etatBureautique;
+      QMetaObject::invokeMethod(racine, "controleBureautique",
+                                Q_RETURN_ARG(QVariant, etatBureautique),
+                                Q_ARG(QVariant, false));
+      if (texteImporte.toString() != attenduImport
+          || etatBureautique.toString() != QStringLiteral("ok")) {
+        std::fprintf(stderr, "smoke: l'import bureautique a echoue : %s | %s\n",
+                     texteImporte.toString().toUtf8().constData(),
+                     etatBureautique.toString().toUtf8().constData());
+        QCoreApplication::exit(12);
+        return;
+      }
+      // « Nouveau » rend l'édition ordinaire : plus d'import en cours.
+      QMetaObject::invokeMethod(racine, "nouveau");
+      for (int i = 0; i < 10; ++i) {
+        QThread::msleep(10);
+        QCoreApplication::processEvents();
+      }
+      QMetaObject::invokeMethod(racine, "controleBureautique",
+                                Q_RETURN_ARG(QVariant, etatBureautique),
+                                Q_ARG(QVariant, true));
+      if (etatBureautique.toString() != QStringLiteral("ok")) {
+        std::fprintf(stderr, "smoke: l'import bureautique survit a Nouveau : %s\n",
+                     etatBureautique.toString().toUtf8().constData());
+        QCoreApplication::exit(13);
         return;
       }
       QCoreApplication::exit(ecrit && entete ? 0 : 8);

@@ -23,7 +23,8 @@ pub mod qobject {
         #[qproperty(QString, nom)]
         /// Encodage retenu à la lecture, affiché en barre d'état.
         #[qproperty(QString, encodage)]
-        /// Format du document : « markdown », « xml » ou « texte ».
+        /// Format du document : clé stable déduite du fichier ouvert (markdown,
+        /// xml, donnees, code, journal, pdf, bureautique, texte).
         #[qproperty(QString, format)]
         /// Libellé du format, pour la barre d'état.
         #[qproperty(QString, libelle)]
@@ -44,7 +45,9 @@ pub mod qobject {
         #[cxx_name = "ouvrir"]
         fn ouvrir(self: Pin<&mut Document>, url: &QString) -> QString;
 
-        /// Écrit le texte dans le fichier désigné, en UTF-8 et en CRLF.
+        /// Écrit le texte dans le fichier désigné, en UTF-8 et en CRLF. Les
+        /// cibles bureautiques sont refusées : l'original d'un import ne
+        /// s'écrase pas, et seul « Enregistrer sous » exporte le Markdown.
         #[qinvokable]
         #[cxx_name = "enregistrer"]
         fn enregistrer(self: Pin<&mut Document>, url: &QString, contenu: &QString) -> bool;
@@ -136,10 +139,38 @@ impl qobject::Document {
         let chemin = texte::chemin_depuis_url(&url.to_string());
         // Un PDF se feuillette, il ne se lit pas comme du texte : des octets
         // binaires y passeraient pour un document illisible de gagné.
-        if texte::format_du_chemin(&chemin) == texte::Format::Pdf {
+        let format = texte::format_du_chemin(&chemin);
+        if format == texte::Format::Pdf {
             self.as_mut()
                 .set_erreur(QString::from("Un PDF se feuillette ; il ne s'édite pas."));
             return QString::from("");
+        }
+        // Un document bureautique s'importe : le noyau en rend du Markdown,
+        // fidélité limitée, et l'original ne s'écrit jamais par-dessus.
+        if format == texte::Format::Bureautique {
+            let octets = match std::fs::read(&chemin) {
+                Ok(o) => o,
+                Err(e) => {
+                    self.as_mut()
+                        .set_erreur(QString::from(&format!("Lecture impossible :\n{e}")));
+                    return QString::from("");
+                }
+            };
+            return match crate::bureautique::vers_markdown(&chemin, &octets) {
+                Ok(markdown) => {
+                    self.as_mut().poser_chemin(&chemin);
+                    // Le Markdown est de nous : son encodage l'est aussi.
+                    self.as_mut().set_encodage(QString::from("UTF-8"));
+                    self.as_mut().set_erreur(QString::from(""));
+                    QString::from(&markdown)
+                }
+                Err(explication) => {
+                    self.as_mut().set_erreur(QString::from(&format!(
+                        "Import impossible :\n{explication}"
+                    )));
+                    QString::from("")
+                }
+            };
         }
         let octets = match std::fs::read(&chemin) {
             Ok(o) => o,
@@ -158,6 +189,12 @@ impl qobject::Document {
 
     pub fn enregistrer(mut self: Pin<&mut Self>, url: &QString, contenu: &QString) -> bool {
         let chemin = texte::chemin_depuis_url(&url.to_string());
+        if texte::format_du_chemin(&chemin) == texte::Format::Bureautique {
+            self.as_mut().set_erreur(QString::from(
+                "Un document bureautique s'importe en Markdown ; il ne s'écrit pas dessus.\nEnregistrez-le sous un autre nom et un autre type.",
+            ));
+            return false;
+        }
         let octets = texte::encoder_utf8_crlf(&contenu.to_string());
         if let Err(e) = std::fs::write(&chemin, octets) {
             self.as_mut()
@@ -179,7 +216,8 @@ impl qobject::Document {
     }
 
     pub fn est_markdown(&self) -> bool {
-        self.format().to_string() == texte::Format::Markdown.cle()
+        let format = self.format().to_string();
+        format == texte::Format::Markdown.cle() || format == texte::Format::Bureautique.cle()
     }
 
     pub fn est_pdf(&self, url: &QString) -> bool {
