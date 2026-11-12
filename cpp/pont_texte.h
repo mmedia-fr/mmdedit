@@ -45,11 +45,12 @@ public:
     curseur.endEditBlock();
   }
 
-  /// Attache la coloration correspondant au format, ou la retire.
+  /// Attache la coloration correspondant au format, ou la retire. Le jeu de
+  /// teintes suit le fond de l'apparence : clair, ou sombre pour « nuit ».
   ///
   /// Un seul colorateur à la fois : l'ancien est détruit, ce qui le détache du
   /// document (l'équivalent du `setDocument(None)` de la version PySide6).
-  Q_INVOKABLE void colorer(QQuickTextDocument* document, const QString& format)
+  Q_INVOKABLE void colorer(QQuickTextDocument* document, const QString& format, bool sombre)
   {
     QTextDocument* doc = document ? document->textDocument() : nullptr;
     delete m_colorateur;
@@ -57,15 +58,15 @@ public:
     if (!doc)
       return;
     if (format == QStringLiteral("markdown"))
-      m_colorateur = new ColorateurMarkdown(doc);
+      m_colorateur = new ColorateurMarkdown(doc, sombre);
     else if (format == QStringLiteral("xml"))
-      m_colorateur = new ColorateurXml(doc);
+      m_colorateur = new ColorateurXml(doc, sombre);
     else if (format == QStringLiteral("donnees"))
-      m_colorateur = new ColorateurDonnees(doc);
+      m_colorateur = new ColorateurDonnees(doc, sombre);
     else if (format == QStringLiteral("code"))
-      m_colorateur = new ColorateurCode(doc);
+      m_colorateur = new ColorateurCode(doc, sombre);
     else if (format == QStringLiteral("journal"))
-      m_colorateur = new ColorateurJournal(doc);
+      m_colorateur = new ColorateurJournal(doc, sombre);
     // Tout autre format — « texte » — reste sans coloration.
   }
 
